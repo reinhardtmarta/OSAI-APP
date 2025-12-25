@@ -1,59 +1,69 @@
-
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Terminal } from './components/Terminal';
 import { OSAIOverlay } from './components/OSAIOverlay';
 import { SettingsDialog } from './components/SettingsDialog';
-import { AIStatus, Suggestion, AppSettings, AIMode, SupportedLanguage } from './types';
+import { AIStatus, Suggestion, AppSettings, AIMode, SupportedLanguage, CognitiveProfile, ConsentState } from './types';
 import { getSuggestion } from './services/geminiService';
-import { Settings, Power, Cpu, Shield, Globe, Accessibility, Phone, Mic, Languages, Users, LayoutDashboard, Activity, Database, History, MousePointer2, Keyboard, Eye, AppWindow, MapPin } from 'lucide-react';
+import { PolicyEngine } from './services/policyEngine';
+import { audit } from './services/auditLog';
+import { classifyIntent, isExplicitConsent } from './services/policy';
+import { Settings, Power, Cpu, Shield, Mic, Activity, AlertOctagon, Info, Lock, ShieldAlert } from 'lucide-react';
 
-const SETTINGS_KEY = 'osai_user_settings_v10';
+const SETTINGS_KEY = 'osai_user_settings_v12_shielded';
 
 const DEFAULT_SETTINGS: AppSettings = {
   isOsaiEnabled: true,
   isAiEnabled: true,
   isAccessibilityMode: true,
   mode: AIMode.PASSIVE,
+  cognitiveProfile: CognitiveProfile.NORMAL,
   policy: {
     blockDangerousKeywords: true,
     requireApproval: true,
     sandboxExecution: true,
     canSee: true,
     canWrite: true,
-    canListen: false,
+    canListen: true, 
     canReadFiles: true,
     canAccessNetwork: false,
     canManageApps: true,
     canMakeCalls: true,
     canAccessContacts: false,
-    canAccessLocation: false, // Default location off
+    canAccessLocation: false, 
     canOverlay: true,      
     canUseKeyboard: true, 
     canReadScreen: true,  
   },
-  ui: {
-    transparency: 0.98,
-    scale: 1.0,
-    fontSize: 'normal'
-  },
+  ui: { transparency: 0.98, scale: 1.0, fontSize: 'normal' },
   data: {
     saveMemory: true,
     allowSuggestions: true, 
     voiceWakeWord: true,
     language: 'pt-BR',
-    showAiLog: true
+    showAiLog: true,
+    isTtsEnabled: true
   }
 };
 
-const WAKE_WORDS: Record<SupportedLanguage, string[]> = {
-  'pt-BR': ['ativar osai', 'abrir osai', 'desativar osai', 'fechar osai'],
-  'en-US': ['activate osai', 'open osai', 'deactivate osai', 'close osai'],
-  'es-ES': ['activar osai', 'abrir osai', 'desactivar osai', 'cerrar osai'],
-  'fr-FR': ['activer osai', 'ouvrir osai', 'désactivar osai', 'fermer osai'],
-  'de-DE': ['osai aktivieren', 'osai öffnen', 'osai deaktivieren', 'osai schließen'],
-  'it-IT': ['attiva osai', 'apri osai', 'chiudi osai', 'disattiva osai'],
-  'zh-CN': ['启动osai', '打开osai', '停用osai', '关闭osai'],
-  'ja-JP': ['osaiを起動', 'osaiを開く', 'osaiを停止', 'osaiを閉じる'],
+const PROFILE_INFO = {
+  [CognitiveProfile.NORMAL]: {
+    color: 'text-blue-400',
+    bg: 'bg-blue-600/10 border-blue-500/20',
+    desc: 'Modo Normal: IA reativa. Ações externas desativadas.',
+    icon: Shield
+  },
+  [CognitiveProfile.ACTIVE]: {
+    color: 'text-emerald-400',
+    bg: 'bg-emerald-600/10 border-emerald-500/20',
+    desc: 'Modo Assistivo: IA proativa. Sugestões exigem SIM.',
+    icon: Activity
+  },
+  [CognitiveProfile.CRITICAL]: {
+    color: 'text-orange-400',
+    bg: 'bg-orange-600/10 border-orange-500/20',
+    desc: 'Modo Crítico: IA protetiva. Prioridade Acessibilidade.',
+    icon: ShieldAlert
+  }
 };
 
 const App: React.FC = () => {
@@ -62,310 +72,248 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : DEFAULT_SETTINGS;
   });
 
-  const [logs, setLogs] = useState<string[]>(["[OSAI] Kernel de Assistência Ativa v5.0 iniciado."]);
+  const [logs, setLogs] = useState<string[]>(["[OSAI] Kernel v5.5 Shielded iniciado."]);
   const [status, setStatus] = useState<AIStatus>(AIStatus.IDLE);
+  const [consentState, setConsentState] = useState<ConsentState>(ConsentState.IDLE);
   const [currentSuggestion, setCurrentSuggestion] = useState<Suggestion | null>(null);
   const [showSettings, setShowSettings] = useState(false);
-  const [showDashboard, setShowDashboard] = useState(true); 
-  const [lastUserRequest, setLastUserRequest] = useState<string | null>(null);
-  const recognitionRef = useRef<any>(null);
-  const prevEnabledRef = useRef(settings.isOsaiEnabled);
+  const timeoutIdRef = useRef<number | null>(null);
 
   const addLog = useCallback((msg: string) => {
     setLogs(prev => [...prev.slice(-49), `[${new Date().toLocaleTimeString()}] ${msg}`]);
   }, []);
 
   useEffect(() => {
-    if (settings.isOsaiEnabled && !prevEnabledRef.current) {
-        handleAnalyze("Olá OSAI. O usuário acabou de habilitar o sistema. Apresente-se brevemente e pergunte como pode ajudar hoje.");
-    }
-    prevEnabledRef.current = settings.isOsaiEnabled;
-  }, [settings.isOsaiEnabled]);
-
-  useEffect(() => {
-    if (lastUserRequest) {
-        addLog(`[SYSTEM] Estado de permissões alterado. Re-avaliando contexto...`);
-        handleAnalyze(lastUserRequest);
-    }
-  }, [
-    settings.policy.canAccessNetwork, 
-    settings.policy.canAccessContacts, 
-    settings.policy.canAccessLocation,
-    settings.policy.canReadScreen, 
-    settings.policy.canUseKeyboard,
-    settings.policy.canManageApps
-  ]);
-
-  useEffect(() => {
-    let interval: number;
-    if (settings.mode === AIMode.ACTIVE && settings.isAiEnabled && status === AIStatus.IDLE) {
-      interval = window.setInterval(() => {
-        const screenCtx = settings.policy.canReadScreen ? "Lendo conteúdo visual da tela atual em tempo real." : "Aguardando permissão de leitura de tela para assistência ativa.";
-        handleAnalyze(`[ATIVO] ${screenCtx} Usuário navegando entre aplicativos.`);
-      }, 25000); 
-    }
-    return () => clearInterval(interval);
-  }, [settings.mode, settings.isAiEnabled, status, settings.policy.canReadScreen]);
-
-  useEffect(() => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitRecognition;
-    if (SpeechRecognition && settings.data.voiceWakeWord && settings.policy.canListen) {
-      if (recognitionRef.current) recognitionRef.current.stop();
-      const recognition = new SpeechRecognition();
-      recognition.continuous = true;
-      recognition.lang = settings.data.language;
-      recognition.onresult = (event: any) => {
-        const text = event.results[event.results.length - 1][0].transcript.toLowerCase();
-        const words = WAKE_WORDS[settings.data.language];
-        
-        // Check for universal wake word "OSAI"
-        if (text.includes('osai')) {
-          if (!settings.isOsaiEnabled) {
-            setSettings(s => ({...s, isOsaiEnabled: true}));
-            addLog(`[VOICE] Assistente Habilitado via chamada direta.`);
-          } else {
-            addLog(`[VOICE] Chamada direta 'OSAI' detectada. Iniciando análise...`);
-            handleAnalyze("O usuário chamou pelo seu nome 'OSAI'. Pergunte em que pode ajudar.");
-          }
-          return;
-        }
-
-        if (text.includes(words[0]) || text.includes(words[1])) {
-          setSettings(s => ({...s, isOsaiEnabled: true}));
-          addLog(`[VOICE] Assistente Habilitado via comando.`);
-        } else if (text.includes(words[2]) || text.includes(words[3])) {
-          setSettings(s => ({...s, isOsaiEnabled: false}));
-          addLog(`[VOICE] Assistente Desabilitado via comando.`);
-        }
-      };
-      recognition.onend = () => { if (settings.data.voiceWakeWord) recognition.start(); };
-      try { recognition.start(); } catch(e) {}
-      recognitionRef.current = recognition;
-    }
-    return () => recognitionRef.current?.stop();
-  }, [settings.data.voiceWakeWord, settings.data.language, settings.policy.canListen, settings.isOsaiEnabled]);
-
-  useEffect(() => {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
   }, [settings]);
 
+  const masterKill = useCallback(() => {
+    setStatus(AIStatus.SUSPENDED);
+    setConsentState(ConsentState.CANCELLED);
+    setCurrentSuggestion(null);
+    if (timeoutIdRef.current) window.clearTimeout(timeoutIdRef.current);
+    addLog("!!! KILL SWITCH ATIVADO - SISTEMA SUSPENSO !!!");
+    audit.log('SECURITY', AIStatus.SUSPENDED, "Kill Switch acionado manualmente.");
+    
+    setTimeout(() => {
+      setStatus(AIStatus.IDLE);
+      setConsentState(ConsentState.IDLE);
+      addLog("[SYSTEM] Cooldown finalizado. Modo Idle.");
+    }, 5000);
+  }, [addLog]);
+
+  const handleUpdatePolicy = useCallback((key: string, value: boolean) => {
+    setSettings(prev => ({
+      ...prev,
+      policy: { ...prev.policy, [key as keyof AppSettings['policy']]: value }
+    }));
+    addLog(`[POLICY] Hardware atualizado: ${key} = ${value}`);
+  }, [addLog]);
+
+  const handleDeny = useCallback((reason: string = "Cancelado pelo usuário.") => {
+    audit.log('CONSENT', AIStatus.IDLE, `Ação rejeitada: ${reason}`);
+    addLog(`[AUDIT] CANCELLED: ${reason}`);
+    setConsentState(ConsentState.CANCELLED);
+    setCurrentSuggestion(null);
+    setStatus(AIStatus.IDLE);
+    if (timeoutIdRef.current) {
+      window.clearTimeout(timeoutIdRef.current);
+      timeoutIdRef.current = null;
+    }
+    setTimeout(() => setConsentState(ConsentState.IDLE), 2000);
+  }, [addLog]);
+
+  const handleApprove = useCallback(async () => {
+    if (!currentSuggestion || status === AIStatus.SUSPENDED) return;
+    
+    audit.log('EXECUTION', AIStatus.EXECUTING, `Confirmado: ${currentSuggestion.action}`);
+    setConsentState(ConsentState.CONFIRMED);
+    setStatus(AIStatus.EXECUTING);
+    addLog(`[AUDIT] CONFIRMED: ${currentSuggestion.action}`);
+    
+    await new Promise(r => setTimeout(r, 1500));
+    setStatus(AIStatus.COOLDOWN);
+    addLog(`[SYSTEM] EXECUTED.`);
+    
+    setTimeout(() => {
+      setStatus(AIStatus.IDLE);
+      setConsentState(ConsentState.IDLE);
+      setCurrentSuggestion(null);
+    }, 2000);
+  }, [currentSuggestion, status, addLog]);
+
   const handleAnalyze = async (customPrompt?: string) => {
-    if (!settings.isAiEnabled) return;
-    if (customPrompt) setLastUserRequest(customPrompt);
+    if (status === AIStatus.SUSPENDED || !settings.isAiEnabled) {
+      if (!settings.isAiEnabled) addLog("[SYSTEM] IA de Ajuda desativada nas configurações.");
+      return;
+    }
+
+    if (customPrompt && PolicyEngine.isHardInterrupt(customPrompt)) {
+      masterKill();
+      return;
+    }
+
+    if (consentState === ConsentState.WAITING_FOR_EXPLICIT_YES && customPrompt) {
+      if (isExplicitConsent(customPrompt)) {
+        await handleApprove();
+        return;
+      } else {
+        handleDeny(`Não confirmado ("${customPrompt}").`);
+        return;
+      }
+    }
     
     setStatus(AIStatus.ANALYZING);
-    addLog(`[CORE] IA observando aplicativos autorizados...`);
+    audit.log('SYSTEM', AIStatus.ANALYZING, `Iniciando análise: ${customPrompt || 'Repouso'}`);
     
     const suggestion = await getSuggestion(
-      customPrompt || "Usuário em atividade no dispositivo.", 
-      settings.isAccessibilityMode, 
+      customPrompt || "Atividade em repouso.", 
+      settings.cognitiveProfile, 
       settings.data.language,
-      {
-        hasContactAccess: settings.policy.canAccessContacts,
-        hasInternetAccess: settings.policy.canAccessNetwork,
-        hasScreenAccess: settings.policy.canReadScreen,
-        hasKeyboardAccess: settings.policy.canUseKeyboard,
-        hasAppManagement: settings.policy.canManageApps,
-        hasLocationAccess: settings.policy.canAccessLocation
-      }
+      settings.policy
     );
     
     if (suggestion) {
-      if (!suggestion.action.includes('Habilitar')) {
-          setLastUserRequest(null);
+      const policyResult = PolicyEngine.validate(suggestion, settings);
+      
+      if (!policyResult.allowed) {
+        audit.log('GOVERNANCE', AIStatus.ERROR, `Bloqueio de Política: ${policyResult.reason}`);
+        addLog(`[GOVERNANCE] BLOQUEADO: ${policyResult.reason}`);
+        setStatus(AIStatus.ERROR);
+        setConsentState(ConsentState.CANCELLED);
+        setTimeout(() => setStatus(AIStatus.IDLE), 3000);
+        return;
       }
+
       setStatus(AIStatus.READY);
       setCurrentSuggestion(suggestion);
-      addLog(`[MOTOR] Sugestão gerada: ${suggestion.action}`);
+      
+      if (suggestion.isSuggestion) {
+          setConsentState(ConsentState.WAITING_FOR_EXPLICIT_YES);
+          audit.log('CONSENT', AIStatus.READY, `Aguardando confirmação para: ${suggestion.action}`);
+          if (timeoutIdRef.current) window.clearTimeout(timeoutIdRef.current);
+          timeoutIdRef.current = window.setTimeout(() => {
+            handleDeny("Timeout: Sem resposta.");
+          }, 30000);
+      } else {
+          setConsentState(ConsentState.IDLE);
+          setStatus(AIStatus.IDLE);
+      }
     } else {
       setStatus(AIStatus.ERROR);
-      addLog(`[ERROR] Falha de comunicação com o motor de IA.`);
+      setConsentState(ConsentState.IDLE);
     }
   };
 
-  const handleApprove = async () => {
-    if (!currentSuggestion) return;
-    setStatus(AIStatus.EXECUTING);
-    addLog(`[AUTH] Executando comando: ${currentSuggestion.action}`);
-    
-    const actionLower = currentSuggestion.action.toLowerCase();
-
-    if (currentSuggestion.action.includes('Habilitar')) {
-        setShowDashboard(true);
-        setShowSettings(true);
-        setStatus(AIStatus.IDLE);
-        setCurrentSuggestion(null);
-        return;
-    }
-
-    if (actionLower.startsWith('fechar') || actionLower.startsWith('sair')) {
-        const appName = currentSuggestion.action.split(' ').slice(1).join(' ');
-        addLog(`[SYSTEM] Encerrando processo do aplicativo: ${appName || 'atual'}`);
-        await new Promise(r => setTimeout(r, 1500));
-        addLog(`[SYSTEM] Recurso liberado. Aplicativo encerrado.`);
-    } else if (currentSuggestion.type === 'call' || currentSuggestion.type === 'emergency') {
-        if (!settings.policy.canAccessContacts && currentSuggestion.type === 'call') {
-            addLog(`[ERROR] Acesso a contatos negado. Habilite nas configurações.`);
-            setStatus(AIStatus.ERROR);
-            return;
-        }
-        setStatus(AIStatus.CALLING);
-        addLog(`[NETWORK] Conectando...`);
-        await new Promise(r => setTimeout(r, 4000));
-        addLog(`[NETWORK] Chamada encerrada.`);
-    } else {
-        await new Promise(r => setTimeout(r, 1000));
-        addLog(`[SYSTEM] Operação concluída.`);
-    }
-
-    setStatus(AIStatus.IDLE);
-    setCurrentSuggestion(null);
-  };
-
-  const aiLogs = logs.filter(log => log.includes('[CORE]') || log.includes('[MOTOR]') || log.includes('[AUTH]') || log.includes('[NETWORK]') || log.includes('[SYSTEM]') || log.includes('[VOICE]') || log.includes('[ERROR]'));
-
-  const fontSizeClass = settings.ui.fontSize === 'large' ? 'text-lg' : 'text-sm';
+  const currentProfileInfo = PROFILE_INFO[settings.cognitiveProfile];
+  const ProfileIcon = currentProfileInfo.icon;
 
   return (
-    <div className={`min-h-screen w-full flex flex-col bg-[#020617] transition-all duration-700 font-sans ${!settings.isOsaiEnabled ? 'grayscale brightness-50' : ''} ${settings.ui.fontSize === 'large' ? 'large-text-active' : ''}`}>
-      {settings.isOsaiEnabled && !showDashboard && (
-        <button 
-          onClick={() => setShowDashboard(true)}
-          className="fixed top-4 left-4 z-[90] p-3 bg-blue-600 rounded-2xl shadow-lg border border-white/10 text-white animate-in zoom-in"
-        >
-          <LayoutDashboard className="w-5 h-5" />
-        </button>
-      )}
-
-      {showDashboard && (
-        <>
-          <header className="sticky top-0 h-16 border-b border-white/5 glass px-4 flex items-center justify-between z-40 shadow-xl">
-            <div className="flex items-center space-x-3">
-              <div className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-all ${settings.isAccessibilityMode ? 'bg-orange-600 shadow-orange-500/20 shadow-lg' : 'bg-blue-600 shadow-blue-500/20 shadow-lg'}`}>
-                  {settings.isAccessibilityMode ? <Accessibility className="w-5 h-5 text-white" /> : <LayoutDashboard className="w-5 h-5 text-white" />}
-              </div>
-              <div onClick={() => setShowDashboard(false)} className="cursor-pointer">
-                <h1 className={`${fontSizeClass} font-black text-white leading-none tracking-tighter`}>OSAI CONTROL</h1>
-                <div className="flex items-center space-x-1 mt-1">
-                  <div className={`w-1.5 h-1.5 rounded-full ${settings.mode === AIMode.ACTIVE ? 'bg-emerald-500 animate-pulse' : 'bg-blue-500'}`} />
-                  <span className="text-[8px] text-slate-400 font-bold uppercase tracking-widest">{settings.mode} MODE</span>
-                </div>
-              </div>
+    <div className={`min-h-screen w-full flex flex-col bg-[#020617] font-sans transition-all duration-500 ${status === AIStatus.SUSPENDED ? 'grayscale contrast-125 brightness-75' : ''}`}>
+      <header className="sticky top-0 h-16 border-b border-white/5 glass px-4 flex items-center justify-between z-40">
+        <div className="flex items-center space-x-3">
+          <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shadow-lg transition-colors ${currentProfileInfo.bg.split(' ')[0].replace('/10', '')}`}>
+            <Cpu className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h1 className="text-sm font-black text-white uppercase tracking-tighter">OSAI SHIELDED v5.5</h1>
+            <div className="flex items-center space-x-1">
+               <ProfileIcon className={`w-2.5 h-2.5 ${currentProfileInfo.color}`} />
+               <span className={`text-[8px] font-bold uppercase ${currentProfileInfo.color}`}>{settings.cognitiveProfile} PROFILE</span>
             </div>
-            
-            <div className="flex items-center space-x-2">
-               <button onClick={() => setShowSettings(true)} className="p-2.5 bg-white/5 hover:bg-white/10 rounded-2xl text-slate-300 transition-all border border-white/5">
-                 <Settings className="w-5 h-5" />
-               </button>
+          </div>
+        </div>
+        
+        <div className="flex items-center space-x-2">
+            <button 
+              onClick={masterKill} 
+              className={`p-2.5 rounded-2xl text-white transition-all active:scale-90 shadow-lg ${status === AIStatus.SUSPENDED ? 'bg-red-900 animate-pulse' : 'bg-red-600 hover:bg-red-500'}`} 
+              title="Kill Switch"
+            >
+               <AlertOctagon className="w-5 h-5" />
+            </button>
+            <button onClick={() => setShowSettings(true)} className="p-2.5 bg-white/5 hover:bg-white/10 rounded-2xl text-slate-300">
+               <Settings className="w-5 h-5" />
+            </button>
+        </div>
+      </header>
+
+      <main className="flex-1 p-5 pb-32 flex flex-col space-y-6 max-w-lg mx-auto w-full">
+        <div className={`p-4 rounded-[32px] border ${currentProfileInfo.bg} flex items-start space-x-4 animate-in fade-in slide-in-from-top-2`}>
+           <div className={`p-2 rounded-xl bg-black/40 ${currentProfileInfo.color}`}>
+              <Info className="w-4 h-4" />
+           </div>
+           <div>
+              <p className="text-[10px] font-black text-white uppercase tracking-tight">{currentProfileInfo.desc}</p>
+              <p className="text-[8px] font-bold text-slate-500 uppercase mt-0.5 tracking-widest">Educação: Ações governadas por política estática.</p>
+           </div>
+        </div>
+
+        <div className="grid grid-cols-4 gap-2">
+            <PermissionBox icon={Shield} active={true} label="GOVERN" />
+            <PermissionBox icon={Mic} active={settings.policy.canListen} label="VOICE" />
+            <PermissionBox icon={status === AIStatus.SUSPENDED ? Lock : Activity} active={status !== AIStatus.SUSPENDED} label="STATUS" />
+            <PermissionBox icon={ShieldAlert} active={consentState === ConsentState.WAITING_FOR_EXPLICIT_YES} label="POLICY" />
+        </div>
+
+        <div className="glass p-6 rounded-[32px] border border-white/10">
+            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+               <Activity className="w-3 h-3" />
+               <span>ESTADO DO SISTEMA</span>
+            </h3>
+            <div className="space-y-3">
+                <StatusRow label="Estado Técnico" value={status} color={status === AIStatus.SUSPENDED ? 'text-red-500 font-black' : 'text-blue-400'} />
+                <StatusRow label="Fluxo Ativo" value={consentState === ConsentState.IDLE ? "REPOUSO" : consentState} color="text-orange-400" />
+                <StatusRow label="Governança" value="DETERMINÍSTICA" color="text-emerald-400" />
             </div>
-          </header>
+        </div>
 
-          <main className="flex-1 p-5 pb-32 flex flex-col space-y-6 max-w-lg mx-auto w-full">
-            <div className="grid grid-cols-6 gap-2">
-                <PermissionBox icon={Globe} active={settings.policy.canAccessNetwork} label="NET" fontSizeClass={fontSizeClass} />
-                <PermissionBox icon={Eye} active={settings.policy.canReadScreen} label="SCREEN" fontSizeClass={fontSizeClass} />
-                <PermissionBox icon={Keyboard} active={settings.policy.canUseKeyboard} label="KEYS" fontSizeClass={fontSizeClass} />
-                <PermissionBox icon={AppWindow} active={settings.policy.canManageApps} label="APPS" fontSizeClass={fontSizeClass} />
-                <PermissionBox icon={Users} active={settings.policy.canAccessContacts} label="CONTS" fontSizeClass={fontSizeClass} />
-                <PermissionBox icon={MapPin} active={settings.policy.canAccessLocation} label="LOC" fontSizeClass={fontSizeClass} />
-            </div>
+        <Terminal logs={logs} />
+      </main>
 
-            <div className={`glass p-6 rounded-[32px] border transition-all relative overflow-hidden ${settings.isAccessibilityMode ? 'border-orange-500/20 shadow-orange-500/5' : 'border-white/10'}`}>
-                <div className="flex items-center justify-between mb-6 border-b border-white/5 pb-4">
-                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
-                        <Shield className="w-4 h-4 text-blue-400" /> STATUS GLOBAL
-                    </h3>
-                    <div className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[8px] font-bold text-emerald-400 uppercase">Seguro</div>
-                </div>
-
-                <div className="space-y-4">
-                    <StatusRow label="Modo Operacional" value={settings.mode === AIMode.ACTIVE ? "Assistência em Tempo Real" : "Modo Manual"} color={settings.mode === AIMode.ACTIVE ? "text-emerald-400" : "text-blue-400"} fontSizeClass={fontSizeClass} />
-                    <StatusRow label="Sobreposição" value={settings.policy.canOverlay ? "ATIVADA" : "DESATIVADA"} color={settings.policy.canOverlay ? "text-emerald-400" : "text-slate-400"} fontSizeClass={fontSizeClass} />
-                    <StatusRow label="IA Integrada" value={status} color={status === AIStatus.ERROR ? 'text-red-400' : 'text-blue-300'} fontSizeClass={fontSizeClass} />
-                </div>
-            </div>
-
-            {settings.data.showAiLog && (
-              <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
-                <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2 px-1">
-                    <History className="w-3 h-3" /> REGISTROS DE ASSISTÊNCIA
-                </h3>
-                <Terminal logs={aiLogs} />
-              </div>
-            )}
-
-            <div className="flex-1 min-h-[120px]">
-               <Terminal logs={logs} />
-            </div>
-          </main>
-
-          <footer className="fixed bottom-0 left-0 right-0 h-24 glass-heavy flex items-center justify-center px-6 z-40 border-t border-white/5">
-              <div className="max-w-md w-full glass px-6 py-4 rounded-[40px] flex items-center justify-between shadow-2xl border border-white/10">
-                    <button 
-                      onClick={() => handleAnalyze()}
-                      className={`w-16 h-16 rounded-full flex items-center justify-center border transition-all shadow-xl active:scale-90 ${settings.isAiEnabled ? 'bg-blue-600 border-blue-400 shadow-blue-600/30' : 'bg-slate-800 border-white/5'}`}
-                    >
-                        <Cpu className={`w-8 h-8 ${settings.isAiEnabled ? 'text-white' : 'text-slate-600'}`} />
-                    </button>
-                    <div className="h-10 w-[1px] bg-white/10"></div>
-                    <button 
-                      onClick={() => setSettings({...settings, isOsaiEnabled: !settings.isOsaiEnabled})}
-                      className={`p-4 rounded-3xl transition-all shadow-lg ${settings.isOsaiEnabled ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}
-                    >
-                      <Power className="w-6 h-6" />
-                    </button>
-              </div>
-          </footer>
-        </>
-      )}
-
-      {settings.isOsaiEnabled && (
-        <OSAIOverlay 
-          status={status} 
-          suggestion={currentSuggestion} 
-          mode={settings.mode}
-          ui={settings.ui}
-          canWrite={settings.policy.canWrite}
-          canListen={settings.policy.canListen}
-          isAccessibilityMode={settings.isAccessibilityMode}
-          onApprove={handleApprove} 
-          onDeny={() => { setCurrentSuggestion(null); setStatus(AIStatus.IDLE); setLastUserRequest(null); }} 
-          onAnalyze={handleAnalyze} 
-          onClose={() => setSettings({...settings, isOsaiEnabled: false})}
-        />
-      )}
+      {/* REGRA ABSOLUTA: Overlay sempre visível enquanto o App estiver aberto.
+          Removido o condicional settings.isOsaiEnabled para assegurar a janela flutuante como elemento fixo da UI. */}
+      <OSAIOverlay 
+        status={status} 
+        suggestion={currentSuggestion} 
+        mode={settings.mode}
+        profile={settings.cognitiveProfile}
+        ui={settings.ui}
+        lang={settings.data.language}
+        canWrite={settings.policy.canWrite}
+        canListen={settings.policy.canListen}
+        isTtsEnabled={settings.data.isTtsEnabled}
+        isAccessibilityMode={settings.isAccessibilityMode}
+        onApprove={handleApprove} 
+        onDeny={handleDeny} 
+        onAnalyze={handleAnalyze} 
+        onUpdatePolicy={handleUpdatePolicy}
+        onClose={() => { /* Overlay é estrutural e permanente */ }}
+      />
 
       {showSettings && (
         <SettingsDialog 
           settings={settings}
           onUpdate={setSettings}
           onClose={() => setShowSettings(false)}
-          onPurgeMemory={(p) => addLog(`[PURGE] Memória limpa.`)}
+          onPurgeMemory={() => addLog(`[MEMORY] Reset.`)}
         />
       )}
-
-      <style>{`
-        .large-text-active .text-[10px] { font-size: 12px; }
-        .large-text-active .text-[11px] { font-size: 14px; }
-        .large-text-active .text-[9px] { font-size: 11px; }
-        .large-text-active .text-xs { font-size: 0.875rem; }
-        .large-text-active .text-sm { font-size: 1rem; }
-      `}</style>
     </div>
   );
 };
 
-const PermissionBox = ({ icon: Icon, active, label, fontSizeClass }: any) => (
-    <div className={`p-4 rounded-3xl flex flex-col items-center justify-center border transition-all ${active ? 'bg-white/5 border-emerald-500/30 text-emerald-400 shadow-[0_5px_15px_rgba(0,0,0,0.2)]' : 'bg-black/40 border-white/5 text-slate-700'}`}>
+const PermissionBox = ({ icon: Icon, active, label }: any) => (
+    <div className={`p-4 rounded-3xl flex flex-col items-center border transition-all ${active ? 'bg-white/5 border-blue-500/30 text-blue-400 shadow-lg shadow-blue-500/5' : 'bg-black/40 border-white/5 text-slate-700'}`}>
         <Icon className="w-5 h-5 mb-1.5" />
-        <span className="text-[8px] font-black uppercase tracking-widest text-center">{label}</span>
+        <span className="text-[8px] font-black">{label}</span>
     </div>
 );
 
-const StatusRow = ({ label, value, color, fontSizeClass }: any) => (
-    <div className={`flex justify-between items-center ${fontSizeClass} font-bold`}>
+const StatusRow = ({ label, value, color }: any) => (
+    <div className="flex justify-between items-center text-xs font-bold">
         <span className="text-slate-500 uppercase tracking-tighter">{label}</span>
-        <span className={color}>{value}</span>
+        <span className={`${color} tracking-tight`}>{value}</span>
     </div>
 );
 

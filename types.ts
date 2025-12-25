@@ -4,14 +4,35 @@ export enum AIStatus {
   ANALYZING = 'ANALYZING',
   READY = 'READY',
   EXECUTING = 'EXECUTING',
+  COOLDOWN = 'COOLDOWN',
   ERROR = 'ERROR',
-  CALLING = 'CALLING'
+  CALLING = 'CALLING',
+  SUSPENDED = 'SUSPENDED' // Estado de Kill Switch ou Erro Crítico
+}
+
+export enum ConsentState {
+  IDLE = 'IDLE',
+  INTENT_DETECTED = 'INTENT_DETECTED',
+  ACTION_REQUIRES_CONFIRMATION = 'ACTION_REQUIRES_CONFIRMATION',
+  WAITING_FOR_EXPLICIT_YES = 'WAITING_FOR_EXPLICIT_YES',
+  CONFIRMED = 'CONFIRMED',
+  CANCELLED = 'CANCELLED'
 }
 
 export enum AIMode {
   ACTIVE = 'ACTIVE', 
   PASSIVE = 'PASSIVE' 
 }
+
+export enum CognitiveProfile {
+  NORMAL = 'NORMAL',
+  ACTIVE = 'ACTIVE',
+  CRITICAL = 'CRITICAL'
+}
+
+export type AIIntent = 'WRITING' | 'CODING' | 'ANALYSIS' | 'IDEATION' | 'SYSTEM' | 'EMERGENCY';
+export type BlockType = 'TEXT' | 'CODE' | 'IDEA' | 'DRAFT' | 'SYSTEM_CMD';
+export type CriticalityLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 
 export type SupportedLanguage = 'pt-BR' | 'en-US' | 'es-ES' | 'fr-FR' | 'de-DE' | 'it-IT' | 'zh-CN' | 'ja-JP';
 
@@ -27,16 +48,16 @@ export interface SecurityPolicy {
   canManageApps: boolean;  
   canMakeCalls: boolean;
   canAccessContacts: boolean;
-  canAccessLocation: boolean; // Added for location-based assistance
-  canOverlay: boolean;      // Permission to stay on top of other apps
-  canUseKeyboard: boolean;  // Permission to intercept or simulate keystrokes
-  canReadScreen: boolean;   // Permission to analyze screen content
+  canAccessLocation: boolean;
+  canOverlay: boolean;      
+  canUseKeyboard: boolean;  
+  canReadScreen: boolean;   
 }
 
 export interface UIConfig {
   transparency: number;
   scale: number;
-  fontSize: 'normal' | 'large'; // Added font size option
+  fontSize: 'normal' | 'large';
 }
 
 export interface DataConfig {
@@ -45,6 +66,13 @@ export interface DataConfig {
   voiceWakeWord: boolean;
   language: SupportedLanguage; 
   showAiLog: boolean;
+  isTtsEnabled: boolean;
+}
+
+export interface MemoryEntry {
+  role: 'user' | 'ai';
+  content: string;
+  timestamp: number;
 }
 
 export interface Suggestion {
@@ -53,7 +81,13 @@ export interface Suggestion {
   description: string;
   riskLevel: 'LOW' | 'MEDIUM' | 'HIGH';
   context: string;
-  type?: 'code' | 'system' | 'network' | 'emergency' | 'call'; 
+  type?: 'code' | 'system' | 'network' | 'emergency' | 'call';
+  intent?: AIIntent;
+  blockType?: BlockType;
+  reasoning?: string;
+  appliedPolicy?: string;
+  criticality?: CriticalityLevel;
+  isSuggestion?: boolean;
 }
 
 export interface AppSettings {
@@ -61,7 +95,16 @@ export interface AppSettings {
   isAiEnabled: boolean;
   isAccessibilityMode: boolean; 
   mode: AIMode;
+  cognitiveProfile: CognitiveProfile;
   policy: SecurityPolicy;
   ui: UIConfig;
   data: DataConfig;
+}
+
+export interface AuditEvent {
+  timestamp: number;
+  category: 'GOVERNANCE' | 'EXECUTION' | 'CONSENT' | 'SECURITY' | 'SYSTEM';
+  state: AIStatus;
+  message: string;
+  data?: any;
 }
