@@ -1,0 +1,9 @@
+{
+  "name": "OSAI - Active Assistant Overlay",
+  "description": "A high-quality, proactive AI overlay that assists across all applications with screen reading and keyboard integration.",
+  "requestFramePermissions": [
+    "microphone",
+    "camera",
+    "geolocation"
+  ]
+}
