@@ -1,13 +1,14 @@
+
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Terminal } from './components/Terminal';
 import { OSAIOverlay } from './components/OSAIOverlay';
 import { SettingsDialog } from './components/SettingsDialog';
 import { AIStatus, Suggestion, AppSettings, AIMode, SupportedLanguage, CognitiveProfile, ConsentState, PlatformType } from './types';
-import { getSuggestion } from './services/geminiService';
+import { aiManager } from './services/aiManager';
 import { PolicyEngine } from './services/policyEngine';
 import { audit } from './services/auditLog';
 import { platformManager } from './services/platformManager';
-import { classifyIntent, isExplicitConsent } from './services/policy';
+import { isExplicitConsent } from './services/policy';
 import { Settings, Power, Cpu, Shield, Mic, Activity, AlertOctagon, Info, Lock, ShieldAlert, Smartphone } from 'lucide-react';
 
 const SETTINGS_KEY = 'osai_user_settings_v13_platform';
@@ -50,19 +51,19 @@ const PROFILE_INFO = {
   [CognitiveProfile.NORMAL]: {
     color: 'text-blue-400',
     bg: 'bg-blue-600/10 border-blue-500/20',
-    desc: 'Modo Normal: IA reativa. Ações externas desativadas.',
+    desc: 'Modo Normal: Orientação e Preparação. Requer confirmação para agir.',
     icon: Shield
   },
   [CognitiveProfile.ACTIVE]: {
     color: 'text-emerald-400',
     bg: 'bg-emerald-600/10 border-emerald-500/20',
-    desc: 'Modo Assistivo: IA proativa. Sugestões exigem SIM.',
+    desc: 'Modo Assistivo: Proativo. IA antecipa tarefas e solicita execução.',
     icon: Activity
   },
   [CognitiveProfile.CRITICAL]: {
     color: 'text-orange-400',
     bg: 'bg-orange-600/10 border-orange-500/20',
-    desc: 'Modo Crítico: IA protetiva. Prioridade Acessibilidade.',
+    desc: 'Modo Acessibilidade: Autonomia Máxima. Age e notifica o usuário.',
     icon: ShieldAlert
   }
 };
@@ -83,11 +84,8 @@ const App: React.FC = () => {
   const timeoutIdRef = useRef<number | null>(null);
 
   useEffect(() => {
-    addLog(`[PLATFORM] Detectado: ${platform}. Engine Shielded pronta.`);
-    if (!capabilities.hasSystemOverlay && platform === PlatformType.IOS) {
-      addLog(`[NOTICE] iOS detectado: Modo App-Bound ativado.`);
-    }
-  }, [platform, capabilities]);
+    addLog(`[PLATFORM] Detectado: ${platform}. Engine Shielded (Scoped-Memory) pronta.`);
+  }, [platform]);
 
   const addLog = useCallback((msg: string) => {
     setLogs(prev => [...prev.slice(-49), `[${new Date().toLocaleTimeString()}] ${msg}`]);
@@ -102,6 +100,7 @@ const App: React.FC = () => {
     setStatus(AIStatus.SUSPENDED);
     setConsentState(ConsentState.CANCELLED);
     setCurrentSuggestion(null);
+    aiManager.clearTaskMemory(); // Safety first
     if (timeoutIdRef.current) window.clearTimeout(timeoutIdRef.current);
     addLog("!!! KILL SWITCH ATIVADO - SISTEMA SUSPENSO !!!");
     audit.log('SECURITY', AIStatus.SUSPENDED, "Kill Switch acionado manualmente.");
@@ -109,7 +108,7 @@ const App: React.FC = () => {
     setTimeout(() => {
       setStatus(AIStatus.IDLE);
       setConsentState(ConsentState.IDLE);
-      addLog("[SYSTEM] Cooldown finalizado. Modo Idle.");
+      addLog("[SYSTEM] Cooldown finalizado. Pronto para retomar tarefas.");
     }, 5000);
   }, [addLog]);
 
@@ -118,12 +117,13 @@ const App: React.FC = () => {
       ...prev,
       policy: { ...prev.policy, [key as keyof AppSettings['policy']]: value }
     }));
-    addLog(`[POLICY] Hardware atualizado: ${key} = ${value}`);
+    addLog(`[POLICY] Governança atualizada: ${key} = ${value}`);
   }, [addLog]);
 
-  const handleDeny = useCallback((reason: string = "Cancelado pelo usuário.") => {
-    audit.log('CONSENT', AIStatus.IDLE, `Ação rejeitada: ${reason}`);
-    addLog(`[AUDIT] CANCELLED: ${reason}`);
+  const handleDeny = useCallback((reason: string = "Ação recusada pelo usuário.") => {
+    audit.log('CONSENT', AIStatus.IDLE, `Tarefa cancelada: ${reason}`);
+    addLog(`[TASK] ABORTADA: ${reason}`);
+    aiManager.clearTaskMemory(); // Clear task context on denial
     setConsentState(ConsentState.CANCELLED);
     setCurrentSuggestion(null);
     setStatus(AIStatus.IDLE);
@@ -138,20 +138,30 @@ const App: React.FC = () => {
     if (!currentSuggestion || status === AIStatus.SUSPENDED) return;
     
     platformManager.triggerHaptic();
-    audit.log('EXECUTION', AIStatus.EXECUTING, `Confirmado: ${currentSuggestion.action}`);
+    audit.log('EXECUTION', AIStatus.EXECUTING, `Confirmado: ${currentSuggestion.action}`, { 
+      provider: currentSuggestion.providerId,
+      intent: currentSuggestion.intent
+    });
+    
     setConsentState(ConsentState.CONFIRMED);
     setStatus(AIStatus.EXECUTING);
-    addLog(`[AUDIT] CONFIRMED: ${currentSuggestion.action}`);
+    addLog(`[EXECUTION] INICIANDO: ${currentSuggestion.action}`);
     
-    await new Promise(r => setTimeout(r, 1500));
+    // Simulate real task execution flow
+    await new Promise(r => setTimeout(r, 1200));
+    
+    if (currentSuggestion.isTaskComplete) {
+      aiManager.clearTaskMemory(); // Clear memory if AI says task is done
+      addLog(`[EXECUTION] TAREFA CONCLUÍDA: Memória de tarefa limpa.`);
+    }
+
     setStatus(AIStatus.COOLDOWN);
-    addLog(`[SYSTEM] EXECUTED.`);
     
     setTimeout(() => {
       setStatus(AIStatus.IDLE);
       setConsentState(ConsentState.IDLE);
       setCurrentSuggestion(null);
-    }, 2000);
+    }, 1000);
   }, [currentSuggestion, status, addLog]);
 
   const handleAnalyze = async (customPrompt?: string) => {
@@ -168,28 +178,29 @@ const App: React.FC = () => {
       if (isExplicitConsent(customPrompt)) {
         await handleApprove();
         return;
-      } else {
-        handleDeny(`Não confirmado ("${customPrompt}").`);
+      } else if (isDenial(customPrompt)) {
+        handleDeny("Recusa explícita.");
         return;
       }
     }
     
     setStatus(AIStatus.ANALYZING);
-    audit.log('SYSTEM', AIStatus.ANALYZING, `Iniciando análise: ${customPrompt || 'Repouso'}`);
+    audit.log('SYSTEM', AIStatus.ANALYZING, `Analisando Intenção: ${customPrompt || 'Repouso'}`);
     
-    const suggestion = await getSuggestion(
-      customPrompt || "Atividade em repouso.", 
-      settings.cognitiveProfile, 
-      settings.data.language,
-      settings.policy
-    );
+    const suggestion = await aiManager.getSuggestion({
+      context: customPrompt || "Aguardando interação.",
+      profile: settings.cognitiveProfile,
+      lang: settings.data.language,
+      policy: settings.policy
+    });
     
     if (suggestion) {
       const policyResult = PolicyEngine.validate(suggestion, settings);
       
       if (!policyResult.allowed) {
-        audit.log('GOVERNANCE', AIStatus.ERROR, `Bloqueio de Política: ${policyResult.reason}`);
-        addLog(`[GOVERNANCE] BLOQUEADO: ${policyResult.reason}`);
+        audit.log('GOVERNANCE', AIStatus.ERROR, `Bloqueio de Segurança: ${policyResult.reason}`);
+        addLog(`[SHIELD] BLOQUEADO: ${policyResult.reason}`);
+        aiManager.clearTaskMemory(); // Clear context on security block
         setStatus(AIStatus.ERROR);
         setConsentState(ConsentState.CANCELLED);
         setTimeout(() => setStatus(AIStatus.IDLE), 3000);
@@ -201,19 +212,32 @@ const App: React.FC = () => {
       
       if (suggestion.isSuggestion) {
           setConsentState(ConsentState.WAITING_FOR_EXPLICIT_YES);
-          audit.log('CONSENT', AIStatus.READY, `Aguardando confirmação para: ${suggestion.action}`);
+          addLog(`[PLAN] TAREFA PREPARADA: ${suggestion.action}`);
           if (timeoutIdRef.current) window.clearTimeout(timeoutIdRef.current);
           timeoutIdRef.current = window.setTimeout(() => {
-            handleDeny("Timeout: Sem resposta.");
+            handleDeny("Timeout: Sem confirmação.");
           }, 30000);
       } else {
           setConsentState(ConsentState.IDLE);
           setStatus(AIStatus.IDLE);
+          if (suggestion.isTaskComplete) {
+            aiManager.clearTaskMemory();
+          }
       }
     } else {
       setStatus(AIStatus.ERROR);
       setConsentState(ConsentState.IDLE);
     }
+  };
+
+  const isDenial = (text: string) => {
+    const t = text.toLowerCase();
+    return t.includes('não') || t.includes('no') || t.includes('parar') || t.includes('cancelar') || t.includes('rejeitar');
+  };
+
+  const handlePurge = () => {
+    aiManager.purgeMemory();
+    addLog("[MEMORY] Purged by user.");
   };
 
   const currentProfileInfo = PROFILE_INFO[settings.cognitiveProfile];
@@ -255,7 +279,7 @@ const App: React.FC = () => {
            </div>
            <div className="text-left">
               <p className="text-[10px] font-black text-white uppercase tracking-tight">{currentProfileInfo.desc}</p>
-              <p className="text-[8px] font-bold text-slate-500 uppercase mt-0.5 tracking-widest">Educação: Ações governadas por política estática.</p>
+              <p className="text-[8px] font-bold text-slate-500 uppercase mt-0.5 tracking-widest">OSAI-CORE: Contexto isolado e execução confirmada.</p>
            </div>
         </div>
 
@@ -263,18 +287,18 @@ const App: React.FC = () => {
             <PermissionBox icon={Shield} active={true} label="GOVERN" />
             <PermissionBox icon={Mic} active={settings.policy.canListen} label="VOICE" />
             <PermissionBox icon={status === AIStatus.SUSPENDED ? Lock : Activity} active={status !== AIStatus.SUSPENDED} label="STATUS" />
-            <PermissionBox icon={ShieldAlert} active={consentState === ConsentState.WAITING_FOR_EXPLICIT_YES} label="POLICY" />
+            <PermissionBox icon={ShieldAlert} active={consentState === ConsentState.WAITING_FOR_EXPLICIT_YES} label="TASK" />
         </div>
 
         <div className="glass p-6 rounded-[32px] border border-white/10 text-left">
             <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
                <Activity className="w-3 h-3" />
-               <span>ESTADO DO SISTEMA</span>
+               <span>ESTADO DO EXECUTOR</span>
             </h3>
             <div className="space-y-3">
                 <StatusRow label="Plataforma" value={platform} color="text-slate-200" />
-                <StatusRow label="Capacidades" value={capabilities.hasSystemOverlay ? "OVERLAY_FULL" : "APP_BOUND"} color="text-blue-400" />
-                <StatusRow label="Governança" value="SHIELDED_V13" color="text-emerald-400" />
+                <StatusRow label="Memory Scoping" value="ACTIVE (Session/Task)" color="text-blue-400" />
+                <StatusRow label="Governance" value="STRICT_ISOLATION" color="text-emerald-400" />
             </div>
         </div>
 
@@ -304,7 +328,7 @@ const App: React.FC = () => {
           settings={settings}
           onUpdate={setSettings}
           onClose={() => setShowSettings(false)}
-          onPurgeMemory={() => addLog(`[MEMORY] Reset.`)}
+          onPurgeMemory={handlePurge}
         />
       )}
     </div>

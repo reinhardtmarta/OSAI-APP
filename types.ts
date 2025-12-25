@@ -82,10 +82,17 @@ export interface DataConfig {
   isTtsEnabled: boolean;
 }
 
+export enum MemoryScope {
+  SESSION = 'SESSION',
+  TASK = 'TASK'
+}
+
 export interface MemoryEntry {
-  role: 'user' | 'ai';
+  role: 'user' | 'ai' | 'system';
   content: string;
   timestamp: number;
+  scope: MemoryScope;
+  metadata?: any;
 }
 
 export interface Suggestion {
@@ -94,13 +101,15 @@ export interface Suggestion {
   description: string;
   riskLevel: 'LOW' | 'MEDIUM' | 'HIGH';
   context: string;
-  type?: 'code' | 'system' | 'network' | 'emergency' | 'call';
+  type?: 'code' | 'system' | 'network' | 'emergency' | 'call' | 'research';
   intent?: AIIntent;
   blockType?: BlockType;
   reasoning?: string;
   appliedPolicy?: string;
   criticality?: CriticalityLevel;
   isSuggestion?: boolean;
+  providerId?: string;
+  isTaskComplete?: boolean; // New: indicates if this finishes the current task memory scope
 }
 
 export interface AppSettings {
@@ -120,4 +129,19 @@ export interface AuditEvent {
   state: AIStatus;
   message: string;
   data?: any;
+}
+
+export interface AIRequestParams {
+  context: string;
+  profile: CognitiveProfile;
+  lang: SupportedLanguage;
+  policy: SecurityPolicy;
+  sessionMemory: MemoryEntry[];
+  taskMemory: MemoryEntry[];
+}
+
+export interface AIProvider {
+  readonly id: string;
+  readonly name: string;
+  getSuggestion(params: AIRequestParams): Promise<Suggestion | null>;
 }

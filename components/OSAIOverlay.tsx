@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Suggestion, AIStatus, AIMode, UIConfig, SupportedLanguage, CognitiveProfile, PlatformType } from '../types';
-import { getGreeting } from '../services/geminiService';
+import { aiManager } from '../services/aiManager';
 import { isInterruptionCommand } from '../services/policy';
 import { platformManager } from '../services/platformManager';
 import { Cpu, Check, X, Minus, Send, Mic, MicOff, Maximize2, User, ShieldCheck, Activity, Lock, AlertOctagon, Volume2, Info } from 'lucide-react';
@@ -89,7 +89,7 @@ export const OSAIOverlay: React.FC<OSAIOverlayProps> = ({
   const recognitionRef = useRef<any>(null);
   const isSuspended = status === AIStatus.SUSPENDED;
 
-  // Sincroniza a Ref com a prop canListen para uso seguro em callbacks assíncronos
+  // Sync ref to allow safe usage in async speech recognition callbacks
   useEffect(() => {
     canListenRef.current = canListen;
   }, [canListen]);
@@ -144,7 +144,6 @@ export const OSAIOverlay: React.FC<OSAIOverlayProps> = ({
       recognitionRef.current.lang = lang;
       
       recognitionRef.current.onresult = (event: any) => {
-        // Bloqueio imediato se o microfone deveria estar desligado
         if (!canListenRef.current || isSuspended) return;
 
         const transcript = event.results[event.results.length - 1][0].transcript;
@@ -157,7 +156,7 @@ export const OSAIOverlay: React.FC<OSAIOverlayProps> = ({
         }
 
         if (normalized.includes('osai')) {
-          const greeting = getGreeting(lang, profile);
+          const greeting = aiManager.getGreeting(lang, profile);
           setHistory(prev => [...prev, { role: 'user', text: transcript, timestamp: new Date() }]);
           setHistory(prev => [...prev, { role: 'ai', text: greeting, timestamp: new Date() }]);
           speak(greeting);
@@ -177,7 +176,6 @@ export const OSAIOverlay: React.FC<OSAIOverlayProps> = ({
       };
       
       recognitionRef.current.onend = () => {
-        // Só reinicia se a permissão ainda estiver ativa
         if (canListenRef.current && !isSuspended) {
           try { recognitionRef.current.start(); } catch (e) { setIsVoiceListening(false); }
         } else {
