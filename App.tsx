@@ -2,14 +2,15 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Terminal } from './components/Terminal';
 import { OSAIOverlay } from './components/OSAIOverlay';
 import { SettingsDialog } from './components/SettingsDialog';
-import { AIStatus, Suggestion, AppSettings, AIMode, SupportedLanguage, CognitiveProfile, ConsentState } from './types';
+import { AIStatus, Suggestion, AppSettings, AIMode, SupportedLanguage, CognitiveProfile, ConsentState, PlatformType } from './types';
 import { getSuggestion } from './services/geminiService';
 import { PolicyEngine } from './services/policyEngine';
 import { audit } from './services/auditLog';
+import { platformManager } from './services/platformManager';
 import { classifyIntent, isExplicitConsent } from './services/policy';
-import { Settings, Power, Cpu, Shield, Mic, Activity, AlertOctagon, Info, Lock, ShieldAlert } from 'lucide-react';
+import { Settings, Power, Cpu, Shield, Mic, Activity, AlertOctagon, Info, Lock, ShieldAlert, Smartphone } from 'lucide-react';
 
-const SETTINGS_KEY = 'osai_user_settings_v12_shielded';
+const SETTINGS_KEY = 'osai_user_settings_v13_platform';
 
 const DEFAULT_SETTINGS: AppSettings = {
   isOsaiEnabled: true,
@@ -72,12 +73,21 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : DEFAULT_SETTINGS;
   });
 
-  const [logs, setLogs] = useState<string[]>(["[OSAI] Kernel v5.5 Shielded iniciado."]);
+  const [platform] = useState(() => platformManager.getPlatform());
+  const [capabilities] = useState(() => platformManager.getCapabilities());
+  const [logs, setLogs] = useState<string[]>([]);
   const [status, setStatus] = useState<AIStatus>(AIStatus.IDLE);
   const [consentState, setConsentState] = useState<ConsentState>(ConsentState.IDLE);
   const [currentSuggestion, setCurrentSuggestion] = useState<Suggestion | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const timeoutIdRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    addLog(`[PLATFORM] Detectado: ${platform}. Engine Shielded pronta.`);
+    if (!capabilities.hasSystemOverlay && platform === PlatformType.IOS) {
+      addLog(`[NOTICE] iOS detectado: Modo App-Bound ativado.`);
+    }
+  }, [platform, capabilities]);
 
   const addLog = useCallback((msg: string) => {
     setLogs(prev => [...prev.slice(-49), `[${new Date().toLocaleTimeString()}] ${msg}`]);
@@ -88,6 +98,7 @@ const App: React.FC = () => {
   }, [settings]);
 
   const masterKill = useCallback(() => {
+    platformManager.triggerHaptic();
     setStatus(AIStatus.SUSPENDED);
     setConsentState(ConsentState.CANCELLED);
     setCurrentSuggestion(null);
@@ -126,6 +137,7 @@ const App: React.FC = () => {
   const handleApprove = useCallback(async () => {
     if (!currentSuggestion || status === AIStatus.SUSPENDED) return;
     
+    platformManager.triggerHaptic();
     audit.log('EXECUTION', AIStatus.EXECUTING, `Confirmado: ${currentSuggestion.action}`);
     setConsentState(ConsentState.CONFIRMED);
     setStatus(AIStatus.EXECUTING);
@@ -144,7 +156,6 @@ const App: React.FC = () => {
 
   const handleAnalyze = async (customPrompt?: string) => {
     if (status === AIStatus.SUSPENDED || !settings.isAiEnabled) {
-      if (!settings.isAiEnabled) addLog("[SYSTEM] IA de Ajuda desativada nas configurações.");
       return;
     }
 
@@ -211,12 +222,15 @@ const App: React.FC = () => {
   return (
     <div className={`min-h-screen w-full flex flex-col bg-[#020617] font-sans transition-all duration-500 ${status === AIStatus.SUSPENDED ? 'grayscale contrast-125 brightness-75' : ''}`}>
       <header className="sticky top-0 h-16 border-b border-white/5 glass px-4 flex items-center justify-between z-40">
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center space-x-3 text-left">
           <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shadow-lg transition-colors ${currentProfileInfo.bg.split(' ')[0].replace('/10', '')}`}>
             <Cpu className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h1 className="text-sm font-black text-white uppercase tracking-tighter">OSAI SHIELDED v5.5</h1>
+            <div className="flex items-center space-x-1.5">
+              <h1 className="text-sm font-black text-white uppercase tracking-tighter">OSAI SHIELDED</h1>
+              <span className="bg-white/10 px-1.5 py-0.5 rounded text-[8px] text-slate-400 font-bold">{platform}</span>
+            </div>
             <div className="flex items-center space-x-1">
                <ProfileIcon className={`w-2.5 h-2.5 ${currentProfileInfo.color}`} />
                <span className={`text-[8px] font-bold uppercase ${currentProfileInfo.color}`}>{settings.cognitiveProfile} PROFILE</span>
@@ -225,11 +239,7 @@ const App: React.FC = () => {
         </div>
         
         <div className="flex items-center space-x-2">
-            <button 
-              onClick={masterKill} 
-              className={`p-2.5 rounded-2xl text-white transition-all active:scale-90 shadow-lg ${status === AIStatus.SUSPENDED ? 'bg-red-900 animate-pulse' : 'bg-red-600 hover:bg-red-500'}`} 
-              title="Kill Switch"
-            >
+            <button onClick={masterKill} className={`p-2.5 rounded-2xl text-white transition-all active:scale-90 shadow-lg ${status === AIStatus.SUSPENDED ? 'bg-red-900 animate-pulse' : 'bg-red-600 hover:bg-red-500'}`} title="Kill Switch">
                <AlertOctagon className="w-5 h-5" />
             </button>
             <button onClick={() => setShowSettings(true)} className="p-2.5 bg-white/5 hover:bg-white/10 rounded-2xl text-slate-300">
@@ -243,7 +253,7 @@ const App: React.FC = () => {
            <div className={`p-2 rounded-xl bg-black/40 ${currentProfileInfo.color}`}>
               <Info className="w-4 h-4" />
            </div>
-           <div>
+           <div className="text-left">
               <p className="text-[10px] font-black text-white uppercase tracking-tight">{currentProfileInfo.desc}</p>
               <p className="text-[8px] font-bold text-slate-500 uppercase mt-0.5 tracking-widest">Educação: Ações governadas por política estática.</p>
            </div>
@@ -256,23 +266,21 @@ const App: React.FC = () => {
             <PermissionBox icon={ShieldAlert} active={consentState === ConsentState.WAITING_FOR_EXPLICIT_YES} label="POLICY" />
         </div>
 
-        <div className="glass p-6 rounded-[32px] border border-white/10">
+        <div className="glass p-6 rounded-[32px] border border-white/10 text-left">
             <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
                <Activity className="w-3 h-3" />
                <span>ESTADO DO SISTEMA</span>
             </h3>
             <div className="space-y-3">
-                <StatusRow label="Estado Técnico" value={status} color={status === AIStatus.SUSPENDED ? 'text-red-500 font-black' : 'text-blue-400'} />
-                <StatusRow label="Fluxo Ativo" value={consentState === ConsentState.IDLE ? "REPOUSO" : consentState} color="text-orange-400" />
-                <StatusRow label="Governança" value="DETERMINÍSTICA" color="text-emerald-400" />
+                <StatusRow label="Plataforma" value={platform} color="text-slate-200" />
+                <StatusRow label="Capacidades" value={capabilities.hasSystemOverlay ? "OVERLAY_FULL" : "APP_BOUND"} color="text-blue-400" />
+                <StatusRow label="Governança" value="SHIELDED_V13" color="text-emerald-400" />
             </div>
         </div>
 
         <Terminal logs={logs} />
       </main>
 
-      {/* REGRA ABSOLUTA: Overlay sempre visível enquanto o App estiver aberto.
-          Removido o condicional settings.isOsaiEnabled para assegurar a janela flutuante como elemento fixo da UI. */}
       <OSAIOverlay 
         status={status} 
         suggestion={currentSuggestion} 
@@ -288,7 +296,7 @@ const App: React.FC = () => {
         onDeny={handleDeny} 
         onAnalyze={handleAnalyze} 
         onUpdatePolicy={handleUpdatePolicy}
-        onClose={() => { /* Overlay é estrutural e permanente */ }}
+        onClose={() => {}}
       />
 
       {showSettings && (

@@ -1,9 +1,9 @@
-
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Suggestion, AIStatus, AIMode, UIConfig, SupportedLanguage, CognitiveProfile } from '../types';
+import { Suggestion, AIStatus, AIMode, UIConfig, SupportedLanguage, CognitiveProfile, PlatformType } from '../types';
 import { getGreeting } from '../services/geminiService';
 import { isInterruptionCommand } from '../services/policy';
-import { Cpu, Check, X, Minus, Send, Mic, MicOff, Maximize2, User, ShieldCheck, Activity, Lock, AlertOctagon, Volume2 } from 'lucide-react';
+import { platformManager } from '../services/platformManager';
+import { Cpu, Check, X, Minus, Send, Mic, MicOff, Maximize2, User, ShieldCheck, Activity, Lock, AlertOctagon, Volume2, Info } from 'lucide-react';
 
 interface OSAIOverlayProps {
   status: AIStatus;
@@ -24,7 +24,7 @@ interface OSAIOverlayProps {
 }
 
 interface Message {
-  role: 'user' | 'ai';
+  role: 'user' | 'ai' | 'system';
   text: string;
   timestamp: Date;
   action?: string;
@@ -73,6 +73,7 @@ export const OSAIOverlay: React.FC<OSAIOverlayProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const canListenRef = useRef(canListen);
+  const platform = platformManager.getPlatform();
   
   const [position, setPosition] = useState({ 
     x: 20, 
@@ -88,9 +89,22 @@ export const OSAIOverlay: React.FC<OSAIOverlayProps> = ({
   const recognitionRef = useRef<any>(null);
   const isSuspended = status === AIStatus.SUSPENDED;
 
+  // Sincroniza a Ref com a prop canListen para uso seguro em callbacks assíncronos
   useEffect(() => {
     canListenRef.current = canListen;
   }, [canListen]);
+
+  useEffect(() => {
+    if (platform === PlatformType.IOS) {
+      setHistory(prev => [
+        { 
+          role: 'system', 
+          text: 'iOS Detectado: Mantenha esta aba aberta para que o microfone continue funcionando.', 
+          timestamp: new Date() 
+        }
+      ]);
+    }
+  }, [platform]);
 
   const speak = useCallback((text: string) => {
     if (!isTtsEnabled || isSuspended) return;
@@ -130,6 +144,7 @@ export const OSAIOverlay: React.FC<OSAIOverlayProps> = ({
       recognitionRef.current.lang = lang;
       
       recognitionRef.current.onresult = (event: any) => {
+        // Bloqueio imediato se o microfone deveria estar desligado
         if (!canListenRef.current || isSuspended) return;
 
         const transcript = event.results[event.results.length - 1][0].transcript;
@@ -152,9 +167,17 @@ export const OSAIOverlay: React.FC<OSAIOverlayProps> = ({
         }
       };
 
-      recognitionRef.current.onstart = () => setIsVoiceListening(true);
+      recognitionRef.current.onstart = () => {
+        if (!canListenRef.current) {
+          recognitionRef.current.stop();
+          setIsVoiceListening(false);
+        } else {
+          setIsVoiceListening(true);
+        }
+      };
       
       recognitionRef.current.onend = () => {
+        // Só reinicia se a permissão ainda estiver ativa
         if (canListenRef.current && !isSuspended) {
           try { recognitionRef.current.start(); } catch (e) { setIsVoiceListening(false); }
         } else {
@@ -229,7 +252,7 @@ export const OSAIOverlay: React.FC<OSAIOverlayProps> = ({
   return (
     <div 
       ref={containerRef}
-      className={`fixed z-[999] select-none animate-in zoom-in duration-300 pointer-events-none transition-all duration-300 ${isVoiceListening ? 'drop-shadow-[0_0_25px_rgba(16,185,129,0.4)]' : ''}`}
+      className={`fixed z-[999] select-none animate-in zoom-in duration-300 pointer-events-none transition-all duration-300 ${isVoiceListening ? 'drop-shadow-[0_0_35px_rgba(16,185,129,0.3)]' : ''}`}
       style={{ 
         left: position.x, 
         top: position.y, 
@@ -265,7 +288,10 @@ export const OSAIOverlay: React.FC<OSAIOverlayProps> = ({
         >
           <div className="flex items-center space-x-2.5">
             <Cpu className={`w-4 h-4 ${isEmergency ? 'text-white' : (isSuspended ? 'text-red-500' : 'text-blue-400')}`} />
-            <span className="font-black text-[9px] uppercase tracking-[0.15em] text-white">OSAI SHIELDED</span>
+            <div className="flex flex-col items-start">
+               <span className="font-black text-[9px] uppercase tracking-[0.15em] text-white">OSAI SHIELDED</span>
+               <span className="text-[7px] font-bold text-slate-500 tracking-[0.2em]">{platform} ENGINE</span>
+            </div>
           </div>
           <div className="flex items-center space-x-1">
             <button 
@@ -288,9 +314,9 @@ export const OSAIOverlay: React.FC<OSAIOverlayProps> = ({
                <div className="flex items-center space-x-2">
                   {isVoiceListening ? (
                     <div className="flex items-end space-x-0.5 h-3">
-                      <div className="w-0.5 bg-emerald-100 animate-[bounce_0.6s_infinite_0s]" />
-                      <div className="w-0.5 bg-emerald-100 animate-[bounce_0.6s_infinite_0.1s]" />
-                      <div className="w-0.5 bg-emerald-100 animate-[bounce_0.6s_infinite_0.2s]" />
+                      <div className="w-0.5 bg-emerald-100 animate-[bounce_0.6s_infinite_0s] rounded-full" />
+                      <div className="w-0.5 bg-emerald-100 animate-[bounce_0.6s_infinite_0.1s] rounded-full" />
+                      <div className="w-0.5 bg-emerald-100 animate-[bounce_0.6s_infinite_0.2s] rounded-full" />
                     </div>
                   ) : <Activity className="w-3 h-3" />}
                   <span className={isVoiceListening ? "text-emerald-50" : ""}>
@@ -318,9 +344,12 @@ export const OSAIOverlay: React.FC<OSAIOverlayProps> = ({
                 <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-in fade-in`}>
                   <div className={`max-w-[85%] p-3.5 rounded-3xl ${fontSizeClass} shadow-lg flex gap-3 ${
                     msg.role === 'user' ? (msg.isInterruption ? 'bg-red-600/30 text-white' : 'bg-blue-600 text-white') + ' rounded-tr-none' : 
+                    msg.role === 'system' ? 'bg-slate-800/50 text-slate-300 italic border border-slate-700 mx-auto w-full text-center rounded-none text-[9px]' :
                     'bg-white/10 text-blue-100 border border-white/5 rounded-tl-none'
                   }`}>
-                    {msg.role === 'ai' ? <Cpu className="w-3.5 h-3.5 mt-0.5 shrink-0 opacity-40" /> : <User className="w-3.5 h-3.5 mt-0.5 shrink-0 opacity-40" />}
+                    {msg.role === 'ai' && <Cpu className="w-3.5 h-3.5 mt-0.5 shrink-0 opacity-40" />}
+                    {msg.role === 'user' && <User className="w-3.5 h-3.5 mt-0.5 shrink-0 opacity-40" />}
+                    {msg.role === 'system' && <Info className="w-3 h-3 mt-0.5 shrink-0 opacity-40" />}
                     <span>{msg.text}</span>
                   </div>
                 </div>
@@ -339,7 +368,7 @@ export const OSAIOverlay: React.FC<OSAIOverlayProps> = ({
             <div className={`p-5 space-y-4 shrink-0 bg-white/5 border-t border-white/10 ${isSuspended ? 'pointer-events-none opacity-50' : 'pointer-events-auto'}`}>
               {status === AIStatus.READY && suggestion && isSuggestion && !isSuspended && (
                 <div className="space-y-3 animate-in slide-in-from-bottom-4">
-                  <div className={`p-4 rounded-3xl border ${isEmergency ? 'bg-red-600/20 border-red-500' : 'bg-blue-600/10 border-blue-500/20'} flex items-start gap-3`}>
+                  <div className={`p-4 rounded-3xl border ${isEmergency ? 'bg-red-600/20 border-red-500' : 'bg-blue-600/10 border-blue-500/20'} flex items-start gap-3 text-left`}>
                     <ShieldCheck className={`w-4 h-4 shrink-0 mt-0.5 ${isEmergency ? 'text-red-400' : 'text-blue-400'}`} />
                     <div className="flex flex-col">
                       <span className="text-[8px] font-black uppercase text-slate-500 mb-1">Ação Sugerida</span>
@@ -371,7 +400,7 @@ export const OSAIOverlay: React.FC<OSAIOverlayProps> = ({
                   disabled={isSuspended}
                   className={`relative w-12 h-12 rounded-[22px] flex flex-col items-center justify-center border transition-all duration-300 ${
                     !canListen ? 'bg-red-900/40 border-red-500/30 text-red-500 shadow-inner' : 
-                    (isVoiceListening ? 'bg-emerald-500 border-emerald-400 text-white shadow-lg ring-4 ring-emerald-500/20' : 'bg-white/5 border-white/10 text-blue-400 hover:bg-white/10')
+                    (isVoiceListening ? 'bg-emerald-600 border-emerald-500 text-white shadow-lg ring-4 ring-emerald-500/20' : 'bg-white/5 border-white/10 text-blue-400 hover:bg-white/10')
                   }`}
                   title={MIC_LABELS[lang].title}
                 >

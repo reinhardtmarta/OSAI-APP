@@ -7,7 +7,7 @@ export enum AIStatus {
   COOLDOWN = 'COOLDOWN',
   ERROR = 'ERROR',
   CALLING = 'CALLING',
-  SUSPENDED = 'SUSPENDED' // Estado de Kill Switch ou Erro Crítico
+  SUSPENDED = 'SUSPENDED'
 }
 
 export enum ConsentState {
@@ -28,6 +28,19 @@ export enum CognitiveProfile {
   NORMAL = 'NORMAL',
   ACTIVE = 'ACTIVE',
   CRITICAL = 'CRITICAL'
+}
+
+export enum PlatformType {
+  ANDROID = 'ANDROID',
+  IOS = 'IOS',
+  WEB = 'WEB'
+}
+
+export interface PlatformCapabilities {
+  hasSystemOverlay: boolean;      // True on Android, False on iOS
+  hasBackgroundListening: boolean; // True on Android, Restricted on iOS
+  hasHapticFeedback: boolean;
+  hasHardwareIntegration: boolean;
 }
 
 export type AIIntent = 'WRITING' | 'CODING' | 'ANALYSIS' | 'IDEATION' | 'SYSTEM' | 'EMERGENCY';
