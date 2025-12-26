@@ -1,81 +1,21 @@
 
-import { AIProvider, AIRequestParams, Suggestion, SupportedLanguage, CognitiveProfile, MemoryEntry, MemoryScope } from '../types';
+import { AIProvider, AIRequestParams, Suggestion, SupportedLanguage, CognitiveProfile, MemoryEntry, MemoryScope, AIStatus } from '../types';
 import { geminiProviderInstance } from './geminiService';
 import { audit } from './auditLog';
 
-/**
- * Deterministic fallback provider for basic interactions when cloud APIs fail.
- */
-class LocalFallbackProvider implements AIProvider {
-  public readonly id = 'osai-local-shield';
-  public readonly name = 'OSAI Local Guard';
-
-  public async getSuggestion(params: AIRequestParams): Promise<Suggestion | null> {
-    const { context } = params;
-    
-    if (context.toLowerCase().includes('osai')) {
-      return {
-        id: 'local-' + Date.now(),
-        context,
-        action: 'GREET',
-        description: 'Desculpe, estou operando em modo offline limitado, mas estou aqui para ajudar.',
-        riskLevel: 'LOW',
-        type: 'system',
-        intent: 'SYSTEM',
-        blockType: 'TEXT',
-        criticality: 'LOW',
-        reasoning: 'Cloud provider failure detected. Falling back to local greeting.',
-        isSuggestion: false,
-        providerId: this.id
-      };
-    }
-
-    return null;
-  }
-}
-
-const MODE_GREETINGS: Record<CognitiveProfile, Record<SupportedLanguage, string>> = {
-  [CognitiveProfile.NORMAL]: {
-    'pt-BR': 'O OSAI está ouvindo. O que você precisa?',
-    'en-US': 'OSAI is listening. What do you need?',
-    'es-ES': 'OSAI está ouvindo. ¿Qué necesitas?',
-    'fr-FR': 'OSAI est à l\'écoute. De quoi avez-vous besoin ?',
-    'de-DE': 'OSAI hört zu. Was benötigen Sie?',
-    'it-IT': 'OSAI è in ascolto. Di cosa hai bisogno?',
-    'zh-CN': 'OSAI正在聆听。你需要什么？',
-    'ja-JP': 'OSAIが聞いています。何が必要ですか？'
-  },
-  [CognitiveProfile.ACTIVE]: {
-    'pt-BR': 'OSAI ativo. Como posso te ajudar agora?',
-    'en-US': 'OSAI active. How can I help you now?',
-    'es-ES': 'OSAI activo. ¿Como posso ayudarte ahora?',
-    'fr-FR': 'OSAI actif. Comment puis-je vous aider maintenant ?',
-    'de-DE': 'OSAI aktiv. Wie kann ich Ihnen agora helfen?',
-    'it-IT': 'OSAI attivo. Come posso aiutarti ora?',
-    'zh-CN': 'OSAI已激活。我现在该如何帮助你？',
-    'ja-JP': 'OSAIアクティブ。今、どのようにお手伝いできますか？'
-  },
-  [CognitiveProfile.CRITICAL]: {
-    'pt-BR': 'OSAI em prontidão total. Diga o que você precisa.',
-    'en-US': 'OSAI in full readiness. Tell me what you need.',
-    'es-ES': 'OSAI en alerta total. Dime qué necesitas.',
-    'fr-FR': 'OSAI en alerte totale. Dites-moi ce dont você precisa.',
-    'de-DE': 'OSAI in voller Bereitschaft. Sagen Sie mir, was Sie brauchen.',
-    'it-IT': 'OSAI in piena prontezza. Dimmi di cosa hai bisogno.',
-    'zh-CN': 'OSAI处于待命状态。告诉我你需要什么。',
-    'ja-JP': 'OSAI準備完了。必要なことを教えてください。'
-  }
-};
+const MEMORY_STORAGE_KEY = 'osai_cognitive_memory_v3';
 
 class AIManager {
   private static instance: AIManager;
-  private providers: AIProvider[] = [geminiProviderInstance, new LocalFallbackProvider()];
+  private providers: AIProvider[] = [geminiProviderInstance];
   private sessionMemory: MemoryEntry[] = [];
   private taskMemory: MemoryEntry[] = [];
-  private readonly MAX_SESSION_MEMORY = 10;
-  private readonly MAX_TASK_MEMORY = 15;
-
-  private constructor() {}
+  private cognitiveMemory: MemoryEntry[] = [];
+  
+  private constructor() {
+    this.loadCognitiveMemory();
+    this.autoCleanupOldData();
+  }
 
   public static getInstance(): AIManager {
     if (!AIManager.instance) {
@@ -84,67 +24,78 @@ class AIManager {
     return AIManager.instance;
   }
 
-  public getGreeting(lang: SupportedLanguage, profile: CognitiveProfile): string {
-    return MODE_GREETINGS[profile][lang] || MODE_GREETINGS[profile]['pt-BR'];
+  private loadCognitiveMemory() {
+    try {
+      const saved = localStorage.getItem(MEMORY_STORAGE_KEY);
+      if (saved) {
+        this.cognitiveMemory = JSON.parse(saved);
+      }
+    } catch (e) { console.error("Falha ao carregar memória", e); }
+  }
+
+  private saveCognitiveMemory() {
+    try {
+      localStorage.setItem(MEMORY_STORAGE_KEY, JSON.stringify(this.cognitiveMemory));
+    } catch (e) { console.error("Falha ao salvar memória", e); }
+  }
+
+  private autoCleanupOldData() {
+    const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+    const now = Date.now();
+    const originalCount = this.cognitiveMemory.length;
+    this.cognitiveMemory = this.cognitiveMemory.filter(m => (now - m.timestamp) < THIRTY_DAYS_MS);
+    if (this.cognitiveMemory.length < originalCount) {
+      this.saveCognitiveMemory();
+      audit.log('SYSTEM', AIStatus.IDLE, `Limpeza: ${originalCount - this.cognitiveMemory.length} removidos.`);
+    }
+  }
+
+  public getGreeting(lang: SupportedLanguage): string {
+    const greetings: Record<string, string> = {
+      'pt-BR': 'Sim? Olá! Como posso ajudar?',
+      'en-US': 'Yes? Hello! How can I help?',
+      'es-ES': '¿Sí? ¡Hola! ¿En qué puedo ayudar?',
+      'fr-FR': 'Oui? Bonjour! Comment puis-je vous aider?',
+      'de-DE': 'Ja? Hallo! Wie kann ich helfen?',
+      'it-IT': 'Sì? Ciao! Come posso aiutarla?',
+      'zh-CN': '您好？有什么我可以帮您的？',
+      'ja-JP': 'はい、何かお手伝いしましょうか？'
+    };
+    return greetings[lang] || greetings['pt-BR'];
   }
 
   public updateMemory(role: 'user' | 'ai' | 'system', content: string, scope: MemoryScope = MemoryScope.SESSION) {
     const entry: MemoryEntry = { role, content, timestamp: Date.now(), scope };
-    
     if (scope === MemoryScope.SESSION) {
       this.sessionMemory.push(entry);
-      if (this.sessionMemory.length > this.MAX_SESSION_MEMORY) this.sessionMemory.shift();
-    } else {
-      this.taskMemory.push(entry);
-      if (this.taskMemory.length > this.MAX_TASK_MEMORY) this.taskMemory.shift();
+      if (this.sessionMemory.length > 30) this.sessionMemory.shift();
+    } else if (scope === MemoryScope.COGNITIVE) {
+      this.cognitiveMemory.push(entry);
+      this.saveCognitiveMemory();
     }
   }
 
-  public async getSuggestion(params: Omit<AIRequestParams, 'sessionMemory' | 'taskMemory'>): Promise<Suggestion | null> {
+  public async getSuggestion(params: Omit<AIRequestParams, 'sessionMemory' | 'taskMemory' | 'cognitiveMemory'>): Promise<Suggestion | null> {
     const fullParams: AIRequestParams = {
       ...params,
       sessionMemory: [...this.sessionMemory],
-      taskMemory: [...this.taskMemory]
+      taskMemory: [...this.taskMemory],
+      cognitiveMemory: [...this.cognitiveMemory]
     };
 
-    for (const provider of this.providers) {
-      try {
-        const suggestion = await provider.getSuggestion(fullParams);
-        if (suggestion) {
-          audit.log('SYSTEM', suggestion.riskLevel === 'HIGH' ? 'READY' : 'IDLE' as any, 
-            `AI Suggestion generated by ${provider.name}`, { providerId: provider.id });
-          
-          // Determine memory scope: if it's an action, it belongs to the current Task
-          const scope = suggestion.isSuggestion ? MemoryScope.TASK : MemoryScope.SESSION;
-          this.updateMemory('user', params.context, scope);
-          this.updateMemory('ai', suggestion.description, scope);
-          
-          return suggestion;
-        }
-      } catch (err) {
-        console.warn(`Provider ${provider.id} failed, attempting next...`, err);
-      }
+    const suggestion = await geminiProviderInstance.getSuggestion(fullParams);
+    if (suggestion) {
+      this.updateMemory('user', params.context, MemoryScope.SESSION);
+      this.updateMemory('ai', suggestion.description, MemoryScope.SESSION);
     }
-
-    audit.log('SYSTEM', 'ERROR' as any, 'All AI providers failed to generate a response.');
-    return null;
+    return suggestion;
   }
 
-  /**
-   * Clears the current task context. Called on completion or cancellation.
-   */
-  public clearTaskMemory() {
-    audit.log('SYSTEM', 'IDLE' as any, 'Clearing task memory scope.');
-    this.taskMemory = [];
-  }
-
-  /**
-   * Clears the entire session context.
-   */
   public purgeMemory() {
-    audit.log('SYSTEM', 'IDLE' as any, 'Purging session and task memory.');
     this.sessionMemory = [];
-    this.taskMemory = [];
+    this.cognitiveMemory = [];
+    localStorage.removeItem(MEMORY_STORAGE_KEY);
+    audit.log('SECURITY', AIStatus.IDLE, 'Memória Cognitiva limpa.');
   }
 }
 

@@ -3,20 +3,20 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Terminal } from './components/Terminal';
 import { OSAIOverlay } from './components/OSAIOverlay';
 import { SettingsDialog } from './components/SettingsDialog';
-import { AIStatus, Suggestion, AppSettings, AIMode, SupportedLanguage, CognitiveProfile, ConsentState, PlatformType } from './types';
+import { BootSequence } from './components/BootSequence';
+import { AIStatus, Suggestion, AppSettings, AIMode, SupportedLanguage, CognitiveProfile } from './types';
 import { aiManager } from './services/aiManager';
 import { PolicyEngine } from './services/policyEngine';
-import { audit } from './services/auditLog';
-import { platformManager } from './services/platformManager';
-import { isExplicitConsent } from './services/policy';
-import { Settings, Power, Cpu, Shield, Mic, Activity, AlertOctagon, Info, Lock, ShieldAlert, Smartphone } from 'lucide-react';
+import { Haptics } from './services/haptics';
+import { getTranslation } from './locales';
+import { Settings, Cpu, ShieldCheck, Zap, Activity, Layers, Bell } from 'lucide-react';
 
-const SETTINGS_KEY = 'osai_user_settings_v13_platform';
+const SETTINGS_KEY = 'osai_user_settings_v32';
 
 const DEFAULT_SETTINGS: AppSettings = {
   isOsaiEnabled: true,
   isAiEnabled: true,
-  isAccessibilityMode: true,
+  isAccessibilityMode: false,
   mode: AIMode.PASSIVE,
   cognitiveProfile: CognitiveProfile.NORMAL,
   policy: {
@@ -27,18 +27,25 @@ const DEFAULT_SETTINGS: AppSettings = {
     canWrite: true,
     canListen: true, 
     canReadFiles: true,
-    canAccessNetwork: false,
+    canAccessNetwork: true,
     canManageApps: true,
     canMakeCalls: true,
-    canAccessContacts: false,
+    canAccessContacts: true,
     canAccessLocation: false, 
     canOverlay: true,      
     canUseKeyboard: true, 
-    canReadScreen: true,  
+    canReadScreen: true,
+    fullAppControl: true,
+    isAiMicrophoneEnabled: false,
+    isUserMicrophoneEnabled: true,
+    isPassiveListeningEnabled: true,
+    isCriticalAssistiveMode: false
   },
   ui: { transparency: 0.98, scale: 1.0, fontSize: 'normal' },
   data: {
     saveMemory: true,
+    adaptiveLearning: true,
+    learningLimitDays: 30,
     allowSuggestions: true, 
     voiceWakeWord: true,
     language: 'pt-BR',
@@ -47,306 +54,215 @@ const DEFAULT_SETTINGS: AppSettings = {
   }
 };
 
-const PROFILE_INFO = {
-  [CognitiveProfile.NORMAL]: {
-    color: 'text-blue-400',
-    bg: 'bg-blue-600/10 border-blue-500/20',
-    desc: 'Modo Normal: Orientação e Preparação. Requer confirmação para agir.',
-    icon: Shield
-  },
-  [CognitiveProfile.ACTIVE]: {
-    color: 'text-emerald-400',
-    bg: 'bg-emerald-600/10 border-emerald-500/20',
-    desc: 'Modo Assistivo: Proativo. IA antecipa tarefas e solicita execução.',
-    icon: Activity
-  },
-  [CognitiveProfile.CRITICAL]: {
-    color: 'text-orange-400',
-    bg: 'bg-orange-600/10 border-orange-500/20',
-    desc: 'Modo Acessibilidade: Autonomia Máxima. Age e notifica o usuário.',
-    icon: ShieldAlert
-  }
-};
-
 const App: React.FC = () => {
+  const [isBooting, setIsBooting] = useState(true);
   const [settings, setSettings] = useState<AppSettings>(() => {
     const saved = localStorage.getItem(SETTINGS_KEY);
     return saved ? JSON.parse(saved) : DEFAULT_SETTINGS;
   });
 
-  const [platform] = useState(() => platformManager.getPlatform());
-  const [capabilities] = useState(() => platformManager.getCapabilities());
   const [logs, setLogs] = useState<string[]>([]);
-  const [status, setStatus] = useState<AIStatus>(AIStatus.IDLE);
-  const [consentState, setConsentState] = useState<ConsentState>(ConsentState.IDLE);
+  const [status, setStatus] = useState<AIStatus>(navigator.onLine ? AIStatus.IDLE : AIStatus.OFFLINE);
   const [currentSuggestion, setCurrentSuggestion] = useState<Suggestion | null>(null);
   const [showSettings, setShowSettings] = useState(false);
-  const timeoutIdRef = useRef<number | null>(null);
+  const needsDoubleConfirmRef = useRef(false);
+  
+  const t = getTranslation(settings.data.language);
+
+  const addLog = useCallback((msg: string, type: 'info' | 'error' | 'success' | 'task' = 'info') => {
+    const prefix = { info: '•', error: '!', success: '✓', task: '>>' }[type];
+    const timestamp = new Date().toLocaleTimeString(settings.data.language, { hour12: false });
+    setLogs(prev => [...prev.slice(-99), `[${timestamp}] ${prefix} ${msg}`]);
+  }, [settings.data.language]);
 
   useEffect(() => {
-    addLog(`[PLATFORM] Detectado: ${platform}. Engine Shielded (Scoped-Memory) pronta.`);
-  }, [platform]);
-
-  const addLog = useCallback((msg: string) => {
-    setLogs(prev => [...prev.slice(-49), `[${new Date().toLocaleTimeString()}] ${msg}`]);
-  }, []);
+    const handleOnline = () => { setStatus(AIStatus.IDLE); addLog(t.ui.online, "success"); };
+    const handleOffline = () => { setStatus(AIStatus.OFFLINE); addLog(t.ui.offline, "error"); };
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [t.ui.online, t.ui.offline, addLog]);
 
   useEffect(() => {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
   }, [settings]);
 
-  const masterKill = useCallback(() => {
-    platformManager.triggerHaptic();
-    setStatus(AIStatus.SUSPENDED);
-    setConsentState(ConsentState.CANCELLED);
-    setCurrentSuggestion(null);
-    aiManager.clearTaskMemory(); // Safety first
-    if (timeoutIdRef.current) window.clearTimeout(timeoutIdRef.current);
-    addLog("!!! KILL SWITCH ATIVADO - SISTEMA SUSPENSO !!!");
-    audit.log('SECURITY', AIStatus.SUSPENDED, "Kill Switch acionado manualmente.");
-    
-    setTimeout(() => {
-      setStatus(AIStatus.IDLE);
-      setConsentState(ConsentState.IDLE);
-      addLog("[SYSTEM] Cooldown finalizado. Pronto para retomar tarefas.");
-    }, 5000);
-  }, [addLog]);
-
-  const handleUpdatePolicy = useCallback((key: string, value: boolean) => {
-    setSettings(prev => ({
-      ...prev,
-      policy: { ...prev.policy, [key as keyof AppSettings['policy']]: value }
-    }));
-    addLog(`[POLICY] Governança atualizada: ${key} = ${value}`);
-  }, [addLog]);
-
-  const handleDeny = useCallback((reason: string = "Ação recusada pelo usuário.") => {
-    audit.log('CONSENT', AIStatus.IDLE, `Tarefa cancelada: ${reason}`);
-    addLog(`[TASK] ABORTADA: ${reason}`);
-    aiManager.clearTaskMemory(); // Clear task context on denial
-    setConsentState(ConsentState.CANCELLED);
-    setCurrentSuggestion(null);
-    setStatus(AIStatus.IDLE);
-    if (timeoutIdRef.current) {
-      window.clearTimeout(timeoutIdRef.current);
-      timeoutIdRef.current = null;
-    }
-    setTimeout(() => setConsentState(ConsentState.IDLE), 2000);
-  }, [addLog]);
-
-  const handleApprove = useCallback(async () => {
-    if (!currentSuggestion || status === AIStatus.SUSPENDED) return;
-    
-    platformManager.triggerHaptic();
-    audit.log('EXECUTION', AIStatus.EXECUTING, `Confirmado: ${currentSuggestion.action}`, { 
-      provider: currentSuggestion.providerId,
-      intent: currentSuggestion.intent
-    });
-    
-    setConsentState(ConsentState.CONFIRMED);
-    setStatus(AIStatus.EXECUTING);
-    addLog(`[EXECUTION] INICIANDO: ${currentSuggestion.action}`);
-    
-    // Simulate real task execution flow
-    await new Promise(r => setTimeout(r, 1200));
-    
-    if (currentSuggestion.isTaskComplete) {
-      aiManager.clearTaskMemory(); // Clear memory if AI says task is done
-      addLog(`[EXECUTION] TAREFA CONCLUÍDA: Memória de tarefa limpa.`);
-    }
-
-    setStatus(AIStatus.COOLDOWN);
-    
-    setTimeout(() => {
-      setStatus(AIStatus.IDLE);
-      setConsentState(ConsentState.IDLE);
-      setCurrentSuggestion(null);
-    }, 1000);
-  }, [currentSuggestion, status, addLog]);
-
   const handleAnalyze = async (customPrompt?: string) => {
-    if (status === AIStatus.SUSPENDED || !settings.isAiEnabled) {
-      return;
+    if (status === AIStatus.OFFLINE) {
+       addLog(t.ai.status.OFFLINE, "error");
+       Haptics.error();
+       return;
     }
-
-    if (customPrompt && PolicyEngine.isHardInterrupt(customPrompt)) {
-      masterKill();
-      return;
-    }
-
-    if (consentState === ConsentState.WAITING_FOR_EXPLICIT_YES && customPrompt) {
-      if (isExplicitConsent(customPrompt)) {
-        await handleApprove();
-        return;
-      } else if (isDenial(customPrompt)) {
-        handleDeny("Recusa explícita.");
-        return;
-      }
-    }
+    if (status === AIStatus.SUSPENDED || !settings.isAiEnabled) return;
     
     setStatus(AIStatus.ANALYZING);
-    audit.log('SYSTEM', AIStatus.ANALYZING, `Analisando Intenção: ${customPrompt || 'Repouso'}`);
+    addLog(`${t.ui.reqCognitive}"${customPrompt}"`, 'info');
     
-    const suggestion = await aiManager.getSuggestion({
-      context: customPrompt || "Aguardando interação.",
-      profile: settings.cognitiveProfile,
-      lang: settings.data.language,
-      policy: settings.policy
-    });
-    
-    if (suggestion) {
-      const policyResult = PolicyEngine.validate(suggestion, settings);
+    try {
+      const suggestion = await aiManager.getSuggestion({
+        context: customPrompt || "Idle check.",
+        profile: settings.cognitiveProfile,
+        lang: settings.data.language,
+        policy: settings.policy
+      });
       
-      if (!policyResult.allowed) {
-        audit.log('GOVERNANCE', AIStatus.ERROR, `Bloqueio de Segurança: ${policyResult.reason}`);
-        addLog(`[SHIELD] BLOQUEADO: ${policyResult.reason}`);
-        aiManager.clearTaskMemory(); // Clear context on security block
-        setStatus(AIStatus.ERROR);
-        setConsentState(ConsentState.CANCELLED);
-        setTimeout(() => setStatus(AIStatus.IDLE), 3000);
-        return;
-      }
-
-      setStatus(AIStatus.READY);
-      setCurrentSuggestion(suggestion);
-      
-      if (suggestion.isSuggestion) {
-          setConsentState(ConsentState.WAITING_FOR_EXPLICIT_YES);
-          addLog(`[PLAN] TAREFA PREPARADA: ${suggestion.action}`);
-          if (timeoutIdRef.current) window.clearTimeout(timeoutIdRef.current);
-          timeoutIdRef.current = window.setTimeout(() => {
-            handleDeny("Timeout: Sem confirmação.");
-          }, 30000);
+      if (suggestion) {
+        const policyResult = PolicyEngine.validate(suggestion, settings);
+        if (!policyResult.allowed) {
+          addLog(`${t.ui.policyRejection}${policyResult.reason}`, 'error');
+          setStatus(AIStatus.ERROR);
+          Haptics.error();
+          setTimeout(() => setStatus(AIStatus.IDLE), 3000);
+          return;
+        }
+        
+        needsDoubleConfirmRef.current = policyResult.requireDoubleConfirmation;
+        setStatus(suggestion.isSuggestion ? AIStatus.READY : AIStatus.IDLE);
+        setCurrentSuggestion(suggestion);
+        if (suggestion.isSuggestion) Haptics.medium();
       } else {
-          setConsentState(ConsentState.IDLE);
-          setStatus(AIStatus.IDLE);
-          if (suggestion.isTaskComplete) {
-            aiManager.clearTaskMemory();
-          }
+        setStatus(AIStatus.ERROR);
+        addLog(t.ui.malformed, "error");
+        Haptics.error();
       }
-    } else {
+    } catch (err) {
       setStatus(AIStatus.ERROR);
-      setConsentState(ConsentState.IDLE);
+      addLog(`${t.ui.busFail}${err}`, "error");
+      Haptics.error();
     }
   };
 
-  const isDenial = (text: string) => {
-    const t = text.toLowerCase();
-    return t.includes('não') || t.includes('no') || t.includes('parar') || t.includes('cancelar') || t.includes('rejeitar');
+  const handleApprove = async () => {
+    if (!currentSuggestion) return;
+
+    if (status === AIStatus.READY && needsDoubleConfirmRef.current) {
+      setStatus(AIStatus.DOUBLE_CONFIRMATION);
+      addLog(t.ui.doubleConfirmReq, "info");
+      Haptics.heavy();
+      return;
+    }
+
+    setStatus(AIStatus.EXECUTING);
+    addLog(`${t.ui.payload}${currentSuggestion.action}`, 'task');
+    Haptics.medium();
+    
+    await new Promise(r => setTimeout(r, 1500));
+    
+    addLog(`${t.ui.success}${currentSuggestion.description.substring(0, 30)}...`, 'success');
+    Haptics.success();
+    setStatus(AIStatus.IDLE);
+    setCurrentSuggestion(null);
   };
 
-  const handlePurge = () => {
-    aiManager.purgeMemory();
-    addLog("[MEMORY] Purged by user.");
+  const handleUpdatePolicy = (key: string, value: any) => {
+    setSettings(prev => ({
+      ...prev,
+      policy: {
+        ...prev.policy,
+        [key]: value
+      }
+    }));
   };
 
-  const currentProfileInfo = PROFILE_INFO[settings.cognitiveProfile];
-  const ProfileIcon = currentProfileInfo.icon;
+  if (isBooting) return <BootSequence lang={settings.data.language} onComplete={() => { setIsBooting(false); Haptics.success(); }} />;
 
   return (
-    <div className={`min-h-screen w-full flex flex-col bg-[#020617] font-sans transition-all duration-500 ${status === AIStatus.SUSPENDED ? 'grayscale contrast-125 brightness-75' : ''}`}>
-      <header className="sticky top-0 h-16 border-b border-white/5 glass px-4 flex items-center justify-between z-40">
-        <div className="flex items-center space-x-3 text-left">
-          <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shadow-lg transition-colors ${currentProfileInfo.bg.split(' ')[0].replace('/10', '')}`}>
-            <Cpu className="w-5 h-5 text-white" />
+    <div className="fixed inset-0 bg-[#020617] text-white selection:bg-blue-500/30 overflow-hidden flex flex-col font-sans">
+      <header className="h-20 border-b border-white/5 glass px-6 flex items-center justify-between shrink-0 z-50">
+        <div className="flex items-center space-x-4">
+          <div className="p-3 bg-blue-600/10 rounded-2xl border border-blue-500/20 shadow-[0_0_20px_rgba(37,99,235,0.1)] relative">
+            <Cpu className="text-blue-400 w-5 h-5 animate-float" />
+            <div className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-500 rounded-full border-2 border-[#020617] animate-pulse" />
           </div>
           <div>
-            <div className="flex items-center space-x-1.5">
-              <h1 className="text-sm font-black text-white uppercase tracking-tighter">OSAI SHIELDED</h1>
-              <span className="bg-white/10 px-1.5 py-0.5 rounded text-[8px] text-slate-400 font-bold">{platform}</span>
-            </div>
-            <div className="flex items-center space-x-1">
-               <ProfileIcon className={`w-2.5 h-2.5 ${currentProfileInfo.color}`} />
-               <span className={`text-[8px] font-bold uppercase ${currentProfileInfo.color}`}>{settings.cognitiveProfile} PROFILE</span>
+            <h1 className="font-extrabold text-[12px] tracking-[0.2em] text-white">{t.ui.coreTitle}</h1>
+            <div className="flex items-center gap-2 mt-0.5">
+               <span className="text-[8px] text-slate-500 font-bold uppercase tracking-widest flex items-center gap-1.5">
+                  <ShieldCheck size={10} className="text-emerald-500" /> {t.ui.systemActive}
+               </span>
             </div>
           </div>
         </div>
-        
-        <div className="flex items-center space-x-2">
-            <button onClick={masterKill} className={`p-2.5 rounded-2xl text-white transition-all active:scale-90 shadow-lg ${status === AIStatus.SUSPENDED ? 'bg-red-900 animate-pulse' : 'bg-red-600 hover:bg-red-500'}`} title="Kill Switch">
-               <AlertOctagon className="w-5 h-5" />
-            </button>
-            <button onClick={() => setShowSettings(true)} className="p-2.5 bg-white/5 hover:bg-white/10 rounded-2xl text-slate-300">
-               <Settings className="w-5 h-5" />
-            </button>
+        <div className="flex items-center gap-2">
+          <button className="p-3 bg-white/5 rounded-2xl border border-white/10 relative">
+            <Bell size={18} className="text-slate-400" />
+            <div className="absolute top-2.5 right-2.5 w-1.5 h-1.5 bg-blue-500 rounded-full" />
+          </button>
+          <button 
+            onClick={() => { setShowSettings(true); Haptics.light(); }} 
+            className="p-3 bg-white/5 rounded-2xl border border-white/10 hover:bg-white/10 transition-all active:scale-90"
+          >
+            <Settings size={20} className="text-slate-400" />
+          </button>
         </div>
       </header>
 
-      <main className="flex-1 p-5 pb-32 flex flex-col space-y-6 max-w-lg mx-auto w-full">
-        <div className={`p-4 rounded-[32px] border ${currentProfileInfo.bg} flex items-start space-x-4 animate-in fade-in slide-in-from-top-2`}>
-           <div className={`p-2 rounded-xl bg-black/40 ${currentProfileInfo.color}`}>
-              <Info className="w-4 h-4" />
-           </div>
-           <div className="text-left">
-              <p className="text-[10px] font-black text-white uppercase tracking-tight">{currentProfileInfo.desc}</p>
-              <p className="text-[8px] font-bold text-slate-500 uppercase mt-0.5 tracking-widest">OSAI-CORE: Contexto isolado e execução confirmada.</p>
-           </div>
+      <main className="flex-1 p-6 space-y-6 overflow-y-auto custom-scrollbar">
+        <div className="grid grid-cols-2 gap-4">
+          <StatusCard label={t.ui.statusCardCore} value={t.ui.ready.split(' / ')[0]} icon={Zap} color="text-emerald-400" sub={t.ui.latency} />
+          <StatusCard label={t.ui.statusCardMemory} value="84 MB" icon={Layers} color="text-blue-400" sub={t.ui.localCognition} />
         </div>
 
-        <div className="grid grid-cols-4 gap-2">
-            <PermissionBox icon={Shield} active={true} label="GOVERN" />
-            <PermissionBox icon={Mic} active={settings.policy.canListen} label="VOICE" />
-            <PermissionBox icon={status === AIStatus.SUSPENDED ? Lock : Activity} active={status !== AIStatus.SUSPENDED} label="STATUS" />
-            <PermissionBox icon={ShieldAlert} active={consentState === ConsentState.WAITING_FOR_EXPLICIT_YES} label="TASK" />
+        <div className="glass rounded-[32px] p-6 border border-white/5 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em] flex items-center gap-2">
+              <Activity size={12} className="text-blue-500" /> {t.ui.monitorTitle}
+            </h2>
+          </div>
+          <Terminal logs={logs} title="SYSTEM LOGS" waitingMessage={t.ui.waitingPulse} />
         </div>
 
-        <div className="glass p-6 rounded-[32px] border border-white/10 text-left">
-            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-               <Activity className="w-3 h-3" />
-               <span>ESTADO DO EXECUTOR</span>
-            </h3>
-            <div className="space-y-3">
-                <StatusRow label="Plataforma" value={platform} color="text-slate-200" />
-                <StatusRow label="Memory Scoping" value="ACTIVE (Session/Task)" color="text-blue-400" />
-                <StatusRow label="Governance" value="STRICT_ISOLATION" color="text-emerald-400" />
-            </div>
+        <div className="py-10 flex flex-col items-center justify-center opacity-20 gap-4 pointer-events-none">
+          <Cpu size={32} className="text-blue-500" />
+          <span className="text-[8px] font-black uppercase tracking-[0.5em] text-blue-500">{t.ui.overlayActive}</span>
         </div>
-
-        <Terminal logs={logs} />
       </main>
 
       <OSAIOverlay 
         status={status} 
         suggestion={currentSuggestion} 
-        mode={settings.mode}
-        profile={settings.cognitiveProfile}
-        ui={settings.ui}
-        lang={settings.data.language}
-        canWrite={settings.policy.canWrite}
-        canListen={settings.policy.canListen}
-        isTtsEnabled={settings.data.isTtsEnabled}
-        isAccessibilityMode={settings.isAccessibilityMode}
+        mode={settings.mode} 
+        profile={settings.cognitiveProfile} 
+        ui={settings.ui} 
+        lang={settings.data.language} 
+        canListen={settings.policy.canListen} 
+        isPassiveListening={settings.policy.isPassiveListeningEnabled} 
+        isAiMicEnabled={settings.policy.isAiMicrophoneEnabled}
+        isUserMicEnabled={settings.policy.isUserMicrophoneEnabled}
+        isTtsEnabled={settings.data.isTtsEnabled} 
+        isAccessibilityMode={settings.isAccessibilityMode} 
         onApprove={handleApprove} 
-        onDeny={handleDeny} 
+        onDeny={() => { setStatus(AIStatus.IDLE); setCurrentSuggestion(null); Haptics.error(); }} 
         onAnalyze={handleAnalyze} 
-        onUpdatePolicy={handleUpdatePolicy}
+        onUpdatePolicy={handleUpdatePolicy} 
         onClose={() => {}}
       />
 
       {showSettings && (
         <SettingsDialog 
-          settings={settings}
-          onUpdate={setSettings}
-          onClose={() => setShowSettings(false)}
-          onPurgeMemory={handlePurge}
+          settings={settings} 
+          onUpdate={setSettings} 
+          onClose={() => setShowSettings(false)} 
+          onPurgeMemory={() => aiManager.purgeMemory()} 
+          onClearLogs={() => setLogs([])} 
         />
       )}
     </div>
   );
 };
 
-const PermissionBox = ({ icon: Icon, active, label }: any) => (
-    <div className={`p-4 rounded-3xl flex flex-col items-center border transition-all ${active ? 'bg-white/5 border-blue-500/30 text-blue-400 shadow-lg shadow-blue-500/5' : 'bg-black/40 border-white/5 text-slate-700'}`}>
-        <Icon className="w-5 h-5 mb-1.5" />
-        <span className="text-[8px] font-black">{label}</span>
+const StatusCard = ({ label, value, icon: Icon, color, sub }: any) => (
+  <div className="p-5 glass rounded-[32px] border border-white/5 flex flex-col gap-3 relative overflow-hidden group">
+    <div className={`p-2 w-fit rounded-xl bg-white/5 ${color}`}><Icon size={16} /></div>
+    <div className="flex flex-col">
+      <span className="text-[9px] font-black uppercase text-slate-500 tracking-widest">{label}</span>
+      <span className="text-lg font-extrabold text-white leading-tight">{value}</span>
+      <span className="text-[8px] text-slate-600 font-bold uppercase mt-1">{sub}</span>
     </div>
-);
-
-const StatusRow = ({ label, value, color }: any) => (
-    <div className="flex justify-between items-center text-xs font-bold">
-        <span className="text-slate-500 uppercase tracking-tighter">{label}</span>
-        <span className={`${color} tracking-tight`}>{value}</span>
-    </div>
+  </div>
 );
 
 export default App;

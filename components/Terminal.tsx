@@ -3,9 +3,11 @@ import React, { useEffect, useRef } from 'react';
 
 interface TerminalProps {
   logs: string[];
+  title: string;
+  waitingMessage: string;
 }
 
-export const Terminal: React.FC<TerminalProps> = ({ logs }) => {
+export const Terminal: React.FC<TerminalProps> = ({ logs, title, waitingMessage }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -17,7 +19,7 @@ export const Terminal: React.FC<TerminalProps> = ({ logs }) => {
   return (
     <div className="h-48 glass rounded-xl mt-4 flex flex-col overflow-hidden shadow-2xl">
       <div className="px-4 py-2 bg-black/40 border-b border-white/10 text-xs font-mono text-gray-400">
-        System Output / Executor Sandbox
+        {title}
       </div>
       <div 
         ref={scrollRef}
@@ -29,7 +31,7 @@ export const Terminal: React.FC<TerminalProps> = ({ logs }) => {
             <span>{log}</span>
           </div>
         ))}
-        {logs.length === 0 && <div className="text-gray-600">Waiting for commands...</div>}
+        {logs.length === 0 && <div className="text-gray-600">{waitingMessage}</div>}
       </div>
     </div>
   );

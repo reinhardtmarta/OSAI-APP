@@ -1,292 +1,240 @@
-import React from 'react';
-import { AppSettings, SupportedLanguage, CognitiveProfile, PlatformType } from '../types';
-import { platformManager } from '../services/platformManager';
-import { X, Shield, Zap, Eye, Globe, Lock, MessageCircle, Activity, Keyboard, Layers, Type, AppWindow, Sun, MapPin, AlertTriangle, Users, History, Check, Mic, Phone, Volume2, VolumeX, Network, Layout, MousePointer2, FileText, Smartphone, AlertCircle, Trash2, Sliders } from 'lucide-react';
+
+import React, { useState } from 'react';
+import { AppSettings, SupportedLanguage } from '../types';
+import { 
+  X, Shield, Mic, Globe, Volume2, 
+  BookOpen, Lock, AlertCircle, Waves, Ear, ShieldAlert, Camera, MapPin, BellRing, Eye, CheckCircle2, RefreshCw, Languages
+} from 'lucide-react';
+import { Haptics } from '../services/haptics';
+import { getTranslation, locales } from '../locales';
 
 interface SettingsDialogProps {
   settings: AppSettings;
-  onUpdate: (settings: AppSettings) => void;
+  onUpdate: (s: AppSettings) => void;
   onClose: () => void;
-  onPurgeMemory: (period: 'today' | 'week' | 'month' | 'all') => void;
+  onPurgeMemory: () => void;
+  onClearLogs?: () => void;
 }
 
-const LANGUAGES: { code: SupportedLanguage; label: string; flag: string }[] = [
-  { code: 'pt-BR', label: 'Português', flag: '🇧🇷' },
-  { code: 'en-US', label: 'English', flag: '🇺🇸' },
-  { code: 'es-ES', label: 'Español', flag: '🇪🇸' },
-  { code: 'fr-FR', label: 'Français', flag: '🇫🇷' },
-  { code: 'de-DE', label: 'Deutsch', flag: '🇩🇪' },
-  { code: 'it-IT', label: 'Italiano', flag: '🇮🇹' },
-  { code: 'zh-CN', label: '中文', flag: '🇨🇳' },
-  { code: 'ja-JP', label: '日本語', flag: '🇯🇵' },
-];
+export const SettingsDialog: React.FC<SettingsDialogProps> = ({ settings, onUpdate, onClose, onPurgeMemory, onClearLogs }) => {
+  const [showDisclaimer, setShowDisclaimer] = useState(false);
+  const [hardwareStatus, setHardwareStatus] = useState<'IDLE' | 'CHECKING' | 'READY' | 'DENIED'>('IDLE');
+  const t = getTranslation(settings.data.language);
 
-export const SettingsDialog: React.FC<SettingsDialogProps> = ({ settings, onUpdate, onClose, onPurgeMemory }) => {
-  const platform = platformManager.getPlatform();
-  const caps = platformManager.getCapabilities();
-
-  const togglePolicy = (key: keyof AppSettings['policy']) => {
-    onUpdate({
-      ...settings,
-      policy: { ...settings.policy, [key]: !settings.policy[key] }
-    });
+  const togglePolicy = (k: keyof AppSettings['policy']) => {
+    Haptics.light();
+    onUpdate({ ...settings, policy: { ...settings.policy, [k]: !settings.policy[k] } });
   };
 
-  const updateData = (key: keyof AppSettings['data'], val: any) => {
-    onUpdate({ ...settings, data: { ...settings.data, [key]: val } });
+  const checkHardware = async () => {
+    setHardwareStatus('CHECKING');
+    Haptics.medium();
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach(t => t.stop());
+      setHardwareStatus('READY');
+      Haptics.success();
+    } catch (e) {
+      setHardwareStatus('DENIED');
+      Haptics.error();
+    }
   };
 
-  const updateUI = (key: keyof AppSettings['ui'], val: any) => {
-    onUpdate({ ...settings, ui: { ...settings.ui, [key]: val } });
-  };
-
-  const updateProfile = (profile: CognitiveProfile) => {
-    onUpdate({ ...settings, cognitiveProfile: profile });
-  };
-
-  const toggleMainSetting = (key: 'isAiEnabled' | 'isOsaiEnabled') => {
-    onUpdate({ ...settings, [key]: !settings[key] });
+  const handleLanguageChange = (lang: SupportedLanguage) => {
+    Haptics.medium();
+    onUpdate({ ...settings, data: { ...settings.data, language: lang } });
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 overflow-y-auto">
-      <div className="glass w-full max-w-2xl rounded-[40px] overflow-hidden shadow-2xl border border-white/10 flex flex-col my-auto">
-        <div className="p-6 border-b border-white/10 flex items-center justify-between bg-white/5">
-          <div className="flex items-center space-x-3 text-left">
-            <div className="p-2.5 bg-blue-500/20 rounded-2xl">
-              <Shield className="w-6 h-6 text-blue-400" />
+    <div className="fixed inset-0 z-[1000] bg-black/95 backdrop-blur-3xl flex items-center justify-center p-4">
+      <div className="glass w-full max-w-2xl rounded-[48px] overflow-hidden flex flex-col border border-white/10 shadow-2xl max-h-[94vh] animate-in fade-in zoom-in-95">
+        <div className="p-7 border-b border-white/10 flex items-center justify-between bg-white/5">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-blue-500/20 rounded-2xl">
+              <Shield className="text-blue-400 w-6 h-6" />
             </div>
             <div>
-              <div className="flex items-center space-x-2">
-                <h2 className="font-black text-white tracking-tight uppercase text-lg">Orquestração Cognitiva</h2>
-                <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded text-[10px] font-black">{platform}</span>
-              </div>
-              <p className="text-[10px] text-slate-500 font-bold tracking-widest uppercase">OSAI CONTROL v5.5</p>
+              <h2 className="font-black uppercase tracking-[0.2em] text-sm text-white">{t.ui.settingsTitle}</h2>
+              <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">{t.ui.settingsSub}</span>
             </div>
           </div>
-          <button onClick={onClose} className="p-3 hover:bg-white/10 rounded-2xl transition-all text-white active:scale-90">
-            <X className="w-6 h-6" />
-          </button>
+          <button onClick={onClose} className="p-3 hover:bg-white/10 rounded-2xl transition-all text-white/50"><X /></button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-8 max-h-[75vh]">
-          {/* Hardware Constraints Alert for iOS */}
-          {platform === PlatformType.IOS && (
-            <div className="p-4 bg-orange-600/10 border border-orange-500/20 rounded-3xl flex gap-4 text-left">
-               <AlertCircle className="w-5 h-5 text-orange-400 shrink-0 mt-0.5" />
-               <div>
-                  <h4 className="text-[10px] font-black text-orange-400 uppercase tracking-widest">Restrições de Plataforma (iOS)</h4>
-                  <p className="text-[10px] text-slate-400 mt-1 font-medium leading-relaxed uppercase tracking-tight">O iOS restringe o uso do microfone em segundo plano e sobreposição de sistema fora do navegador. Mantenha o app em foco para melhor assistência.</p>
-               </div>
-            </div>
-          )}
-
-          {/* Master Controls Section */}
-          <section className="space-y-4 text-left">
-            <h3 className="text-xs font-black text-slate-500 uppercase tracking-[0.2em] flex items-center space-x-2 px-1">
-              <Smartphone className="w-3.5 h-3.5" />
-              <span>Controles Principais</span>
+        <div className="flex-1 overflow-y-auto p-7 space-y-10 custom-scrollbar">
+          
+          <section className="space-y-4">
+            <h3 className="text-[10px] font-black text-blue-400 uppercase tracking-widest flex items-center gap-2">
+              <Languages size={12}/> {t.name}
             </h3>
-            <div className="bg-white/5 border border-white/5 rounded-[32px] p-2 space-y-1">
-              <PermissionRow 
-                label="Processamento de IA Ativo" 
-                desc="Ativa análise e sugestões automáticas" 
-                active={settings.isAiEnabled} 
-                onToggle={() => toggleMainSetting('isAiEnabled')} 
-                icon={Zap} 
-                color="text-yellow-400" 
-              />
-              <PermissionRow 
-                label="Visibilidade do Overlay" 
-                desc={caps.hasSystemOverlay ? "Janela flutuante sobre todo o sistema" : "Janela flutuante restrita ao App (iOS)"} 
-                active={settings.isOsaiEnabled} 
-                onToggle={() => toggleMainSetting('isOsaiEnabled')} 
-                icon={Layout} 
-                color="text-emerald-400"
-                badge={!caps.hasSystemOverlay ? "RESTRICTED" : undefined}
-              />
-            </div>
-          </section>
-
-          {/* Cognitive Profile Section */}
-          <section className="space-y-4 text-left">
-            <h3 className="text-xs font-black text-slate-500 uppercase tracking-[0.2em] flex items-center space-x-2 px-1">
-              <Users className="w-3.5 h-3.5" />
-              <span>Perfil de Mediação</span>
-            </h3>
-            <div className="flex flex-col space-y-3">
-              <ProfileButton 
-                active={settings.cognitiveProfile === CognitiveProfile.NORMAL}
-                onClick={() => updateProfile(CognitiveProfile.NORMAL)}
-                icon={MessageCircle}
-                title="1. MODO NORMAL (Reativo)"
-                desc="IA reativa. Não sugere ações. Autonomia total do usuário."
-                color="blue"
-              />
-              <ProfileButton 
-                active={settings.cognitiveProfile === CognitiveProfile.ACTIVE}
-                onClick={() => updateProfile(CognitiveProfile.ACTIVE)}
-                icon={Activity}
-                title="2. MODO ASSISTIVO (Proativo)"
-                desc="IA sugere automações baseadas no contexto. Requer SIM."
-                color="emerald"
-              />
-              <ProfileButton 
-                active={settings.cognitiveProfile === CognitiveProfile.CRITICAL}
-                onClick={() => updateProfile(CognitiveProfile.CRITICAL)}
-                icon={ShieldAlert}
-                title="3. MODO CRÍTICO (Protetivo)"
-                desc="Segurança máxima. IA intervém em situações de risco."
-                color="orange"
-              />
-            </div>
-          </section>
-
-          {/* Policy Section */}
-          <section className="space-y-4 text-left">
-            <h3 className="text-xs font-black text-slate-500 uppercase tracking-[0.2em] flex items-center space-x-2 px-1">
-              <Lock className="w-3.5 h-3.5" />
-              <span>Privacidade e Segurança</span>
-            </h3>
-            <div className="bg-white/5 border border-white/5 rounded-[32px] p-2 space-y-1">
-              <PermissionRow label="Escuta Ativa (Mic)" active={settings.policy.canListen} onToggle={() => togglePolicy('canListen')} icon={Mic} color="text-emerald-400" />
-              <PermissionRow label="Escrita Assistida" active={settings.policy.canWrite} onToggle={() => togglePolicy('canWrite')} icon={Keyboard} color="text-blue-400" />
-              <PermissionRow label="Visão do Sistema" active={settings.policy.canSee} onToggle={() => togglePolicy('canSee')} icon={Eye} color="text-purple-400" badge={!caps.hasSystemOverlay ? "ANDROID_ONLY" : undefined} />
-              <PermissionRow label="Chamadas Emergência" active={settings.policy.canMakeCalls} onToggle={() => togglePolicy('canMakeCalls')} icon={Phone} color="text-red-400" />
-            </div>
-          </section>
-
-          {/* Language Section */}
-          <section className="space-y-4 text-left">
-            <h3 className="text-xs font-black text-slate-500 uppercase tracking-[0.2em] flex items-center space-x-2 px-1">
-              <Globe className="w-3.5 h-3.5" />
-              <span>Idioma da Interface</span>
-            </h3>
-            <div className="grid grid-cols-2 gap-2">
-              {LANGUAGES.map(lang => (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {(Object.keys(locales) as SupportedLanguage[]).map((lang) => (
                 <button 
-                  key={lang.code}
-                  onClick={() => updateData('language', lang.code)}
-                  className={`flex items-center justify-between p-4 rounded-3xl border transition-all ${settings.data.language === lang.code ? 'bg-blue-600/10 border-blue-500/50 text-white' : 'bg-white/5 border-white/5 text-slate-400'}`}
+                  key={lang}
+                  onClick={() => handleLanguageChange(lang)}
+                  className={`py-3 px-2 rounded-2xl text-[10px] font-black uppercase tracking-tight border transition-all ${
+                    settings.data.language === lang 
+                      ? 'bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-900/40' 
+                      : 'bg-white/5 border-white/5 text-slate-400 hover:bg-white/10'
+                  }`}
                 >
-                  <span className="text-xs font-bold">{lang.label}</span>
-                  <span className="text-lg">{lang.flag}</span>
+                  {locales[lang].name}
                 </button>
               ))}
             </div>
           </section>
 
-          {/* Advanced UI Section */}
-          <section className="space-y-4 text-left">
-            <h3 className="text-xs font-black text-slate-500 uppercase tracking-[0.2em] flex items-center space-x-2 px-1">
-              <Sliders className="w-3.5 h-3.5" />
-              <span>Customização do Overlay</span>
-            </h3>
-            <div className="bg-white/5 border border-white/5 rounded-[32px] p-6 space-y-6">
-              <div className="space-y-3">
-                <div className="flex justify-between text-[10px] font-black text-slate-500 uppercase tracking-widest">
-                  <span>Transparência</span>
-                  <span className="text-blue-400">{Math.round(settings.ui.transparency * 100)}%</span>
-                </div>
-                <input 
-                  type="range" min="0.5" max="1" step="0.05" 
-                  value={settings.ui.transparency} 
-                  onChange={(e) => updateUI('transparency', parseFloat(e.target.value))}
-                  className="w-full accent-blue-500 h-1.5 bg-black/40 rounded-full appearance-none"
-                />
-              </div>
-              <div className="space-y-3">
-                <div className="flex justify-between text-[10px] font-black text-slate-500 uppercase tracking-widest">
-                  <span>Escala da UI</span>
-                  <span className="text-blue-400">{Math.round(settings.ui.scale * 100)}%</span>
-                </div>
-                <input 
-                  type="range" min="0.8" max="1.2" step="0.05" 
-                  value={settings.ui.scale} 
-                  onChange={(e) => updateUI('scale', parseFloat(e.target.value))}
-                  className="w-full accent-blue-500 h-1.5 bg-black/40 rounded-full appearance-none"
-                />
-              </div>
+          <section className="space-y-4">
+            <div className="flex items-center justify-between mb-2">
+               <h3 className="text-[10px] font-black text-blue-400 uppercase tracking-widest flex items-center gap-2">
+                 <Waves size={12}/> {t.ui.voiceSensors}
+               </h3>
+               <button 
+                onClick={checkHardware} 
+                className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-[9px] font-black uppercase transition-all ${
+                  hardwareStatus === 'READY' ? 'bg-emerald-500/20 text-emerald-400' : 
+                  hardwareStatus === 'DENIED' ? 'bg-red-500/20 text-red-400' : 'bg-white/5 text-slate-400 hover:bg-white/10'
+                }`}
+               >
+                 {hardwareStatus === 'CHECKING' && <RefreshCw size={10} className="animate-spin" />}
+                 {hardwareStatus === 'READY' && <CheckCircle2 size={10} />}
+                 {hardwareStatus === 'IDLE' ? t.ui.hardwareCheck : (t.ui[hardwareStatus.toLowerCase() as keyof typeof t.ui] || hardwareStatus)}
+               </button>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+               <PermissionToggle 
+                  label={t.permissions.aiMic.label} 
+                  active={settings.policy.isAiMicrophoneEnabled} 
+                  onToggle={() => togglePolicy('isAiMicrophoneEnabled')} 
+                  icon={Ear} 
+                  description={t.permissions.aiMic.desc}
+               />
+               <PermissionToggle 
+                  label={t.permissions.userMic.label} 
+                  active={settings.policy.isUserMicrophoneEnabled} 
+                  onToggle={() => togglePolicy('isUserMicrophoneEnabled')} 
+                  icon={Mic} 
+                  description={t.permissions.userMic.desc}
+               />
+               <PermissionToggle 
+                  label={t.permissions.passive.label} 
+                  active={settings.policy.isPassiveListeningEnabled} 
+                  onToggle={() => togglePolicy('isPassiveListeningEnabled')} 
+                  icon={BellRing} 
+                  description={t.permissions.passive.desc}
+               />
+               <PermissionToggle 
+                  label={t.permissions.tts.label} 
+                  active={settings.data.isTtsEnabled} 
+                  onToggle={() => onUpdate({...settings, data: {...settings.data, isTtsEnabled: !settings.data.isTtsEnabled}})} 
+                  icon={Volume2} 
+                  description={t.permissions.tts.desc}
+               />
             </div>
           </section>
 
-          {/* Purge Memory Section */}
-          <section className="space-y-4 text-left pt-4">
-            <div className="p-6 bg-red-600/5 border border-red-500/10 rounded-[40px] space-y-4">
-              <div className="flex items-center space-x-3">
-                <Trash2 className="w-5 h-5 text-red-500" />
-                <h4 className="text-xs font-black text-white uppercase tracking-widest">Limpeza de Dados</h4>
-              </div>
-              <p className="text-[10px] text-slate-400 font-medium uppercase tracking-tight">O OSAI armazena localmente um histórico de interações para melhorar a precisão cognitiva.</p>
-              <div className="grid grid-cols-2 gap-2 pt-2">
-                 <button onClick={() => onPurgeMemory('today')} className="py-3 rounded-2xl bg-white/5 hover:bg-white/10 text-[9px] font-black text-white uppercase border border-white/5">Hoje</button>
-                 <button onClick={() => onPurgeMemory('all')} className="py-3 rounded-2xl bg-red-600/20 hover:bg-red-600/30 text-[9px] font-black text-red-400 uppercase border border-red-500/20">Tudo</button>
-              </div>
+          <section className="space-y-4">
+            <h3 className="text-[10px] font-black text-emerald-400 uppercase tracking-widest flex items-center gap-2">
+              <Lock size={12}/> {t.ui.deviceAccess}
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+               <PermissionToggle 
+                  label={t.permissions.camera.label} 
+                  active={settings.policy.canSee} 
+                  onToggle={() => togglePolicy('canSee')} 
+                  icon={Camera} 
+                  description={t.permissions.camera.desc}
+               />
+               <PermissionToggle 
+                  label={t.permissions.location.label} 
+                  active={settings.policy.canAccessLocation} 
+                  onToggle={() => togglePolicy('canAccessLocation')} 
+                  icon={MapPin} 
+                  description={t.permissions.location.desc}
+               />
+               <PermissionToggle 
+                  label={t.permissions.screen.label} 
+                  active={settings.policy.canReadScreen} 
+                  onToggle={() => togglePolicy('canReadScreen')} 
+                  icon={Eye} 
+                  description={t.permissions.screen.desc}
+               />
+               <PermissionToggle 
+                  label={t.permissions.web.label} 
+                  active={settings.policy.canAccessNetwork} 
+                  onToggle={() => togglePolicy('canAccessNetwork')} 
+                  icon={Globe} 
+                  description={t.permissions.web.desc}
+               />
             </div>
+          </section>
+
+          <section className="space-y-4">
+            <h3 className="text-[10px] font-black text-red-500 uppercase tracking-widest flex items-center gap-2">
+              <ShieldAlert size={12}/> {t.ui.securityAccessibility}
+            </h3>
+            <div className="space-y-3">
+               <PermissionToggle 
+                  label={t.permissions.accessibility.label} 
+                  active={settings.isAccessibilityMode} 
+                  onToggle={() => setShowDisclaimer(!settings.isAccessibilityMode)} 
+                  icon={BookOpen} 
+                  description={t.permissions.accessibility.desc}
+               />
+            </div>
+             
+             {showDisclaimer && !settings.isAccessibilityMode && (
+               <div className="p-7 bg-red-600/5 border-2 border-red-500/20 rounded-[40px] space-y-4 animate-in fade-in">
+                 <div className="flex items-center gap-3 text-red-400 font-black text-[11px] uppercase tracking-widest">
+                   <AlertCircle size={18} /> {t.ui.riskWarning}
+                 </div>
+                 <p className="text-[11px] text-slate-400 leading-relaxed font-medium">
+                   {t.ui.riskDescription}
+                 </p>
+                 <button 
+                  onClick={() => { onUpdate({...settings, isAccessibilityMode: true}); setShowDisclaimer(false); Haptics.heavy(); }} 
+                  className="w-full py-5 bg-red-600 text-white rounded-3xl text-[10px] font-black uppercase tracking-[0.2em] shadow-xl active:scale-95"
+                 >
+                   {t.ui.confirmTotalAccess}
+                 </button>
+               </div>
+             )}
+          </section>
+
+          <section className="pt-6 border-t border-white/5 flex gap-4">
+            <button onClick={() => { onPurgeMemory(); Haptics.error(); }} className="flex-1 py-5 bg-white/5 text-slate-400 rounded-3xl font-black text-[9px] uppercase tracking-widest border border-white/5 hover:bg-red-500/10 hover:text-red-400">
+               {t.ui.clearMemory}
+            </button>
+            <button onClick={() => { if(onClearLogs) onClearLogs(); Haptics.light(); }} className="flex-1 py-5 bg-white/5 text-slate-400 rounded-3xl font-black text-[9px] uppercase tracking-widest border border-white/5 hover:bg-blue-500/10 hover:text-blue-400">
+               {t.ui.clearLogs}
+            </button>
           </section>
         </div>
 
-        <div className="p-6 bg-black/40 border-t border-white/10 flex justify-center">
-            <button onClick={onClose} className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-black rounded-3xl transition-all shadow-xl active:scale-95 uppercase tracking-widest text-xs">
-              Salvar Alterações
-            </button>
+        <div className="p-7 bg-black/60 border-t border-white/10">
+          <button onClick={onClose} className="w-full py-6 bg-blue-600 text-white font-black rounded-[32px] uppercase text-xs tracking-[0.4em] shadow-2xl active:scale-95">
+            {t.ui.saveChanges}
+          </button>
         </div>
       </div>
     </div>
   );
 };
 
-const PermissionRow = ({ label, desc, active, onToggle, icon: Icon, color, badge }: any) => (
-  <div className="flex items-center justify-between p-4 hover:bg-white/5 rounded-[26px] transition-all">
-    <div className="flex items-center space-x-4">
-      <div className={`p-2.5 rounded-2xl bg-black/40 ${color}`}>
-        <Icon className="w-5 h-5" />
-      </div>
-      <div className="text-left">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-black text-white uppercase tracking-tight">{label}</span>
-          {badge && <span className="px-1.5 py-0.5 bg-red-600/20 text-red-400 rounded-[4px] text-[7px] font-black uppercase tracking-tighter">{badge}</span>}
-        </div>
-        {desc && <p className="text-[9px] text-slate-500 font-bold tracking-tight mt-0.5 uppercase">{desc}</p>}
-      </div>
-    </div>
-    <button 
-      onClick={onToggle}
-      className={`w-12 h-6 rounded-full transition-all relative ${active ? 'bg-blue-600 shadow-[0_0_15px_rgba(37,99,235,0.4)]' : 'bg-white/10'}`}
-    >
-      <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all shadow-md ${active ? 'left-7' : 'left-1'}`} />
-    </button>
-  </div>
-);
-
-const ProfileButton = ({ active, onClick, icon: Icon, title, desc, color }: any) => {
-  const colors = {
-    blue: active ? 'bg-blue-600 text-white shadow-blue-500/20' : 'bg-white/5 text-slate-400 border-white/5 hover:bg-white/10',
-    emerald: active ? 'bg-emerald-600 text-white shadow-emerald-500/20' : 'bg-white/5 text-slate-400 border-white/5 hover:bg-white/10',
-    orange: active ? 'bg-orange-600 text-white shadow-orange-500/20' : 'bg-white/5 text-slate-400 border-white/5 hover:bg-white/10'
-  };
-
-  return (
-    <button 
-      onClick={onClick}
-      className={`p-5 rounded-[32px] border transition-all text-left flex gap-4 items-start ${colors[color as keyof typeof colors]}`}
-    >
-      <div className={`p-3 rounded-2xl bg-black/20 ${active ? 'text-white' : 'text-slate-500'}`}>
-        <Icon className="w-5 h-5" />
+const PermissionToggle = ({ label, active, onToggle, icon: Icon, description }: any) => (
+  <button onClick={onToggle} className={`group flex items-center justify-between p-5 rounded-[32px] border transition-all duration-300 ${active ? 'bg-blue-600/10 border-blue-500/30' : 'bg-white/5 border-white/5 opacity-60 hover:opacity-100 hover:bg-white/10'}`}>
+    <div className="flex items-center gap-4 text-left">
+      <div className={`p-3 rounded-2xl ${active ? 'bg-blue-600/20 text-blue-400' : 'bg-slate-800 text-slate-500'}`}>
+        <Icon size={18} />
       </div>
       <div className="flex flex-col">
-        <span className="text-xs font-black uppercase tracking-widest">{title}</span>
-        <span className="text-[10px] font-bold opacity-60 mt-1 leading-relaxed">{desc}</span>
+        <span className="text-[11px] font-black uppercase text-white tracking-tight">{label}</span>
+        {description && <span className="text-[8px] font-bold text-slate-500 uppercase tracking-tighter opacity-70">{description}</span>}
       </div>
-      {active && <Check className="w-4 h-4 ml-auto shrink-0 mt-1" />}
-    </button>
-  );
-};
-
-const ShieldAlert = ({ className }: { className?: string }) => (
-  <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/>
-    <path d="M12 8v4"/>
-    <path d="M12 16h.01"/>
-  </svg>
+    </div>
+    <div className={`w-11 h-6 rounded-full relative transition-all duration-500 flex items-center px-1 ${active ? 'bg-blue-500' : 'bg-white/10'}`}>
+      <div className={`w-4 h-4 rounded-full bg-white transition-all duration-300 ${active ? 'translate-x-5' : 'translate-x-0'}`} />
+    </div>
+  </button>
 );

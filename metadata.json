@@ -1,9 +1,15 @@
 {
-  "name": "OSAI ",
-  "description": "A high-quality, proactive AI overlay that assists across all applications with screen reading and keyboard integration.",
+  "name": "OSAI - Cognitive System Assistant",
+  "description": "Assistente de acessibilidade proativo com integração profunda de hardware e IA.",
   "requestFramePermissions": [
     "microphone",
     "camera",
     "geolocation"
-  ]
+  ],
+  "mobileConfig": {
+    "orientation": "portrait",
+    "themeColor": "#020617",
+    "allowBackgroundAudio": true,
+    "display": "standalone"
+  }
 }
