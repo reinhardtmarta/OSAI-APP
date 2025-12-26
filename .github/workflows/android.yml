@@ -1,0 +1,42 @@
+name: Build React Native Android
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Dependencies
+        run: npm install
+
+      # Configura o ambiente Java e Gradle
+      - name: Setup JDK
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      # Cria a pasta e copia o keystore (Obrigatório para release)
+      # - name: Setup Keystore (Se for build de Release)
+      #   ... (Passos para decodificar e configurar o keystore usando Secrets)
+
+      - name: Build Android App Bundle (AAB) / APK
+        run: cd android && ./gradlew assembleRelease # ou assembleDebug
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release.aab
+          # Verifique o caminho exato para o seu projeto:
+          path: android/app/build/outputs/bundle/release/app-release.aab
+          
