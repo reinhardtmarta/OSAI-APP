@@ -8,7 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "start-backend": "node server.js",
-    "cap": "npx cap"  <-- ADICIONE ESTA LINHA!
+    "cap": "npx cap"  
   },
   "dependencies": {
     "@google/generative-ai": "^0.20.0",
@@ -18,15 +18,15 @@
     "react-dom": "^19.2.3",
     "react": "^19.2.3",
     "lucide-react": "^0.562.0",
-    "@capacitor/android": "^6.0.0",  <-- Garanta que esta linha existe
-    "@capacitor/core": "^6.0.0"     <-- Garanta que esta linha existe
+    "@capacitor/android": "^6.0.0",  
+    "@capacitor/core": "^6.0.0"     
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.0",
-    "@capacitor/cli": "^6.0.0"       <-- Garanta que esta linha existe
+    "@capacitor/cli": "^6.0.0"      
   }
 }
 
