@@ -1,0 +1,58 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build_android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Dependencies
+        run: npm install
+        
+      # --- PREPARAÇÃO DO APK ---
+      
+      # 1. Configura o ambiente Java (necessário para o Gradle)
+      - name: Setup JDK
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      # 2. Constrói o código web (cria a pasta 'dist')
+      - name: Build Web Code (Vite)
+        run: npm run build
+
+      # 3. Copia o código web ('dist') para dentro da pasta 'android'
+      - name: Copy Web Assets to Android
+        run: npx cap copy android
+        
+      # --- BUILD DO APK ---
+        
+      # 4. Dá permissão para rodar o script Gradle
+      - name: Grant execute permission for gradlew
+        run: chmod +x ./gradlew
+        working-directory: android 
+
+      # 5. Roda o Build de Release do Android (cria o APK)
+      - name: Build Release APK
+        run: ./gradlew assembleRelease
+        working-directory: android 
+
+      # 6. Faz o upload do APK como artefato
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: osai-app-release-apk
+          path: android/app/build/outputs/apk/release/app-release-unsigned.apk
+          # Nota: Usamos o APK 'unsigned' (não assinado) por ser mais simples no CI
+          
