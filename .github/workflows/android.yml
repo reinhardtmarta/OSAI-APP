@@ -1,65 +1,54 @@
 name: Build Android APK (Capacitor)
 
-on:
-  push:
-    branches: [ main ]
-  workflow_dispatch: # Permite execução manual pela interface do GitHub
+# ... (Partes on: e jobs: - sem alteração)
 
-jobs:
   build_android:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         name: Checkout Code
 
-      # Configuração do Node.js
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      # Instala as dependências do package.json
       - name: Install Dependencies
         run: npm install
         
       # --- PREPARAÇÃO DO AMBIENTE ANDROID ---
       
-      # Configura o JDK (Java Development Kit) necessário para o Gradle
+      # 1. Configura o JDK (Java Development Kit) necessário para o Gradle
       - name: Setup JDK 17
         uses: actions/setup-java@v3
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      # 1. Constrói o código web (cria a pasta 'dist')
+      # 2. Constrói o código web (cria a pasta 'dist')
       - name: Build Web Code (Vite)
         run: npm run build
+        
+      # 💥 NOVO PASSO CRÍTICO: Registra/Re-Adiciona a plataforma no ambiente CI
+      - name: Add Android Platform to CI Environment
+        # Usamos 'npm run cap' novamente para evitar o erro de 'executable'
+        run: npm run cap -- add android 
 
-      # 2. Copia o código web compilado ('dist') para dentro da pasta 'android/app/src/main/assets'
+      # 3. Copia o código web compilado ('dist') para dentro da pasta 'android/app/src/main/assets'
       - name: Copy Web Assets to Android
-        run: npm run cap -- copy android
+        run: npm run cap -- copy android # O comando anterior agora deve funcionar!
         
       # --- BUILD DO APK (Comandos Gradle) ---
         
-      # 3. Dá permissão de execução para o script Gradle Wrapper
+      # 4. Dá permissão de execução para o script Gradle Wrapper
       - name: Grant execute permission for gradlew
         run: chmod +x ./gradlew
         working-directory: android 
 
-      # 4. Roda o Build de Release do Android para criar o APK (usando o working-directory)
+      # 5. Roda o Build de Release do Android para criar o APK
       - name: Build Release APK
-        # assembleRelease cria o APK não assinado (unsigned)
         run: ./gradlew assembleRelease
         working-directory: android 
 
-      # --- UPLOAD DO ARTEFATO ---
-
-      # 5. Salva o APK gerado como um artefato do workflow
-      - name: Upload APK Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: osai-app-release-apk
-          # O APK gerado pelo assembleRelease não assinado
-          path: android/app/build/outputs/apk/release/app-release-unsigned.apk
-          retention-days: 7
-          
+      # ... (Etapa de upload do artefato - sem alteração)
+      
