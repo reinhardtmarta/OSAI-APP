@@ -1,6 +1,6 @@
 {
   "name": "OSAI - Cognitive System Assistant",
-  "description": "Assistente de acessibilidade proativo com integração profunda de hardware e IA.",
+  "description": "Proactive accessibility assistant with deep hardware and AI integration.",
   "requestFramePermissions": [
     "microphone",
     "camera",

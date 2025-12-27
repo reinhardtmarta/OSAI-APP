@@ -3,7 +3,7 @@ export const enUS = {
   name: "English",
   ui: {
     coreTitle: "OSAI CORE",
-    systemActive: "System Active v3.1",
+    systemActive: "System Active v3.2",
     statusCardCore: "Core",
     statusCardMemory: "Memory",
     monitorTitle: "Bus Monitor",
@@ -36,7 +36,10 @@ export const enUS = {
     payload: "Payload: ",
     success: "Success: ",
     riskProtocol: "Risk Protocol",
-    systemLogs: "SYSTEM LOGS"
+    systemLogs: "SYSTEM LOGS",
+    executingFunction: "Executing Active Function",
+    sources: "Search Sources:",
+    suggestions: "Proactive Suggestions"
   },
   ai: {
     status: {
@@ -46,7 +49,8 @@ export const enUS = {
       DOUBLE_CONFIRMATION: "L2 Confirmation",
       EXECUTING: "Acting...",
       ERROR: "Error",
-      OFFLINE: "Offline"
+      OFFLINE: "Offline",
+      CALLING: "Calling Tool"
     },
     responses: {
       wake: "Yes? How can I help?",
@@ -67,16 +71,23 @@ export const enUS = {
     web: { label: "Web Browsing", desc: "Real-time internet searches." },
     accessibility: { label: "Accessibility Control", desc: "Allows AI to interact with other apps." }
   },
+  suggestions: {
+    news: { label: "Summarize News", prompt: "What are the most important news today?" },
+    social: { label: "Social Media", prompt: "Summarize what is happening on my social media feeds." },
+    youtube: { label: "YouTube Search", prompt: "Search for AI videos on YouTube." },
+    write: { label: "Write Email", prompt: "Help me write a professional email." }
+  },
   boot: [
-    "> OSAI KERNEL v3.1.0-STABLE",
+    "> OSAI KERNEL v3.2.0-STABLE",
     "> INITIALIZING COGNITIVE_CORE...",
+    "> SYSTEM_KNOWLEDGE: LOADED",
+    "> LOADING ACTIVE_TOOLS: 4 MODULES",
     "> LOADING NEURAL_NETWORKS: GEMINI-3-PRO",
     "> CHECKING SYSTEM_POLICY: SECURE_ENCLAVE",
     "> AUTHENTICATING HARDWARE_ABSTRACTION_LAYER",
     "> ESTABLISHING OVERLAY_Z_INDEX: 999",
     "> MICROPHONE_ARRAY: ONLINE",
     "> SCREEN_READER_MODULE: ACTIVE",
-    "> ACCESS_CONTROL_LIST: UPDATED",
     "> READY."
   ]
 };

@@ -5,6 +5,7 @@ export class SpeechEngine {
   private recognition: any;
   private isMuted: boolean = true;
   private isActive: boolean = false;
+  private forceStop: boolean = false;
 
   constructor(
     private lang: SupportedLanguage,
@@ -31,10 +32,13 @@ export class SpeechEngine {
           interim += e.results[i][0].transcript;
         }
       }
-      this.onResult(final, interim);
+      if (final || interim) {
+        this.onResult(final, interim);
+      }
     };
 
     this.recognition.onerror = (e: any) => {
+      if (e.error === 'no-speech') return;
       console.warn("Speech recognition error:", e.error);
       this.isActive = false;
       this.onError(e.error);
@@ -42,30 +46,43 @@ export class SpeechEngine {
 
     this.recognition.onend = () => {
       this.isActive = false;
-      if (!this.isMuted) {
-        setTimeout(() => this.start(), 100); // Tentar reconectar se não estiver silenciado
+      // Só reinicia se não houver pedido explícito de parada
+      if (!this.isMuted && !this.forceStop) {
+        try {
+          this.recognition.start();
+          this.isActive = true;
+        } catch (err) {
+          setTimeout(() => { if (!this.isMuted) this.start(); }, 300);
+        }
       }
       this.onEnd();
     };
   }
 
   public start() {
-    if (!this.recognition || this.isActive) return;
+    if (!this.recognition) return;
     this.isMuted = false;
+    this.forceStop = false;
+    if (this.isActive) return;
+    
     try {
       this.recognition.start();
       this.isActive = true;
     } catch (e) {
-      console.debug("Speech recognition already started or failed:", e);
+      this.isActive = false;
     }
   }
 
   public stop() {
     this.isMuted = true;
+    this.forceStop = true;
     this.isActive = false;
-    try {
-      this.recognition.stop();
-    } catch (e) {}
+    if (this.recognition) {
+      try {
+        this.recognition.stop();
+        this.recognition.abort(); 
+      } catch (e) {}
+    }
   }
 
   public updateLanguage(newLang: SupportedLanguage) {

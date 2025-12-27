@@ -9,7 +9,7 @@ interface ValidationResult {
 
 export class PolicyEngine {
   /**
-   * Palavras de ativação expandidas e fonemas curtos para os 8 idiomas.
+   * Expanded activation words and short phonemes for the supported languages.
    */
   public static readonly WAKE_WORDS = [
     'osai', 'ia', 'ai', 'hey osai', 'ok osai', 'o', 'ó', 'ô',
@@ -18,12 +18,12 @@ export class PolicyEngine {
   ];
 
   /**
-   * Detecção sensível: Verifica se a transcrição contém ou começa com gatilhos.
+   * Sensitive detection: Checks if the transcript contains or starts with triggers.
    */
   public static detectWakeWord(transcript: string): boolean {
     const normalized = transcript.toLowerCase().trim();
     
-    // Tratamento especial para o gatilho curto "O" / "Ó"
+    // Special treatment for the short trigger "O" / "Ó"
     const shortTrigger = ['o', 'ó', 'ô', 'ia', 'ai'];
     if (shortTrigger.includes(normalized)) return true;
     
@@ -39,21 +39,21 @@ export class PolicyEngine {
     const { cognitiveProfile, policy } = settings;
 
     if (suggestion.type === 'network' && !policy.canAccessNetwork) {
-      return { allowed: false, reason: "Acesso à rede desativado.", requireDoubleConfirmation: false };
+      return { allowed: false, reason: "Network access disabled.", requireDoubleConfirmation: false };
     }
     if (suggestion.type === 'call' && !policy.canMakeCalls) {
-      return { allowed: false, reason: "Chamadas restritas.", requireDoubleConfirmation: false };
+      return { allowed: false, reason: "Calls restricted.", requireDoubleConfirmation: false };
     }
 
     if (suggestion.riskLevel === 'HIGH' && cognitiveProfile === CognitiveProfile.NORMAL) {
       return { 
         allowed: false, 
-        reason: "Risco alto detectado no perfil Normal.",
+        reason: "High risk detected in Normal profile.",
         requireDoubleConfirmation: false 
       };
     }
 
-    // Se o Modo Assistivo Crítico estiver ligado, TODA ação requer confirmação dupla.
+    // If Critical Assistive Mode is on, EVERY action requires double confirmation.
     const mustDoubleConfirm = policy.isCriticalAssistiveMode || 
                              suggestion.criticality === 'CRITICAL' || 
                              suggestion.riskLevel === 'MEDIUM' || 

@@ -3,7 +3,7 @@ export const zhCN = {
   name: "简体中文",
   ui: {
     coreTitle: "OSAI 核心",
-    systemActive: "系统激活 v3.1",
+    systemActive: "系统激活 v3.2",
     statusCardCore: "核心",
     statusCardMemory: "内存",
     monitorTitle: "总线监控",
@@ -36,7 +36,10 @@ export const zhCN = {
     payload: "有效载荷: ",
     success: "成功: ",
     riskProtocol: "风险协议",
-    systemLogs: "系统日志"
+    systemLogs: "系统日志",
+    executingFunction: "正在执行主动功能",
+    sources: "搜索来源:",
+    suggestions: "主动建议"
   },
   ai: {
     status: {
@@ -46,7 +49,8 @@ export const zhCN = {
       DOUBLE_CONFIRMATION: "L2 二次确认",
       EXECUTING: "正在执行...",
       ERROR: "错误",
-      OFFLINE: "离线"
+      OFFLINE: "离线",
+      CALLING: "调用工具"
     },
     responses: {
       wake: "您好？有什么我可以帮您的？",
@@ -63,20 +67,21 @@ export const zhCN = {
     tts: { label: "语音回复 (TTS)", desc: "AI 会为您朗读。" },
     camera: { label: "相机访问", desc: "允许视觉和二维码分析。" },
     location: { label: "位置信息", desc: "根据当前位置提供帮助。" },
-    screen: { label: "屏幕读取", desc: "AI 查看您的屏幕。" },
+    screen: { label: "屏幕阅读", desc: "AI 查看您的屏幕。" },
     web: { label: "网页浏览", desc: "实时互联网搜索。" },
     accessibility: { label: "辅助功能控制", desc: "允许 AI 与应用互动。" }
   },
+  suggestions: {
+    news: { label: "总结新闻", prompt: "今天最重要的新闻是什么？" },
+    social: { label: "社交媒体", prompt: "总结我的社交媒体动态。" },
+    youtube: { label: "YouTube 搜索", prompt: "在 YouTube 上搜索 AI 视频。" },
+    write: { label: "写电子邮件", prompt: "帮我写一封专业的电子邮件。" }
+  },
   boot: [
-    "> OSAI 内核 v3.1.0-稳定版",
-    "> 正在初始化认知核心...",
-    "> 正在加载神经网络: GEMINI-3-PRO",
-    "> 检查系统策略: 安全飞地",
-    "> 验证硬件抽象层",
-    "> 建立覆盖层 Z-INDEX: 999",
-    "> 麦克风矩阵: 在线",
-    "> 屏幕阅读器模块: 激活",
-    "> 访问控制列表: 已更新",
+    "> OSAI 内核 v3.2.0-稳定版",
+    "> 正在初始化...",
+    "> 系统知识已加载",
+    "> 主动工具已加载",
     "> 就绪。"
   ]
 };

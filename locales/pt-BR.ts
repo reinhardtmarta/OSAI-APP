@@ -3,7 +3,7 @@ export const ptBR = {
   name: "Português",
   ui: {
     coreTitle: "OSAI CORE",
-    systemActive: "Sistema Ativo v3.1",
+    systemActive: "Sistema Ativo v3.2",
     statusCardCore: "Núcleo",
     statusCardMemory: "Memória",
     monitorTitle: "Monitor de Barramento",
@@ -36,7 +36,10 @@ export const ptBR = {
     payload: "Carga Útil: ",
     success: "Sucesso: ",
     riskProtocol: "Protocolo de Risco",
-    systemLogs: "LOGS DO SISTEMA"
+    systemLogs: "LOGS DO SISTEMA",
+    executingFunction: "Executando Função Ativa",
+    sources: "Fontes de Pesquisa:",
+    suggestions: "Sugestões Proativas"
   },
   ai: {
     status: {
@@ -46,7 +49,8 @@ export const ptBR = {
       DOUBLE_CONFIRMATION: "Confirmação N2",
       EXECUTING: "Agindo...",
       ERROR: "Erro",
-      OFFLINE: "Offline"
+      OFFLINE: "Offline",
+      CALLING: "Chamando Ferramenta"
     },
     responses: {
       wake: "Sim? Como posso ajudar?",
@@ -67,16 +71,23 @@ export const ptBR = {
     web: { label: "Navegação Web", desc: "Pesquisas em tempo real na internet." },
     accessibility: { label: "Controle de Acessibilidade", desc: "Autoriza a IA a interagir com outros apps." }
   },
+  suggestions: {
+    news: { label: "Resumir Notícias", prompt: "Quais as notícias mais importantes de hoje?" },
+    social: { label: "Redes Sociais", prompt: "Resuma o que está acontecendo nas minhas redes sociais." },
+    youtube: { label: "Busca YouTube", prompt: "Procure vídeos sobre IA no YouTube." },
+    write: { label: "Escrever E-mail", prompt: "Me ajude a escrever um e-mail profissional." }
+  },
   boot: [
-    "> NÚCLEO OSAI v3.1.0-ESTÁVEL",
+    "> NÚCLEO OSAI v3.2.0-ESTÁVEL",
     "> INICIALIZANDO CORE_COGNITIVO...",
+    "> CONHECIMENTO_SISTEMA: CARREGADO",
+    "> CARREGANDO FERRAMENTAS_ATIVAS: 4 MÓDULOS",
     "> CARREGANDO REDES_NEURAIS: GEMINI-3-PRO",
     "> CHECANDO POLÍTICA_SISTEMA: ENCLAVE_SEGURO",
     "> AUTENTICANDO CAMADA_ABSTRAÇÃO_HARDWARE",
     "> ESTABELECENDO Z-INDEX_OVERLAY: 999",
     "> MATRIZ_MICROFONE: ONLINE",
     "> MÓDULO_LEITURA_TELA: ATIVO",
-    "> LISTA_CONTROLE_ACESSO: ATUALIZADA",
     "> PRONTO."
   ]
 };

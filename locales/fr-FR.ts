@@ -3,7 +3,7 @@ export const frFR = {
   name: "Français",
   ui: {
     coreTitle: "OSAI CORE",
-    systemActive: "Système Actif v3.1",
+    systemActive: "Système Actif v3.2",
     statusCardCore: "Noyau",
     statusCardMemory: "Mémoire",
     monitorTitle: "Moniteur de Bus",
@@ -36,7 +36,10 @@ export const frFR = {
     payload: "Charge utile: ",
     success: "Succès: ",
     riskProtocol: "Protocole de Risque",
-    systemLogs: "LOGS DU SYSTÈME"
+    systemLogs: "LOGS DU SYSTÈME",
+    executingFunction: "Exécution de la Fonction Active",
+    sources: "Sources de Recherche:",
+    suggestions: "Suggestions Proactives"
   },
   ai: {
     status: {
@@ -46,7 +49,8 @@ export const frFR = {
       DOUBLE_CONFIRMATION: "Confirmation N2",
       EXECUTING: "Action...",
       ERROR: "Erreur",
-      OFFLINE: "Hors ligne"
+      OFFLINE: "Hors ligne",
+      CALLING: "Appel de l'Outil"
     },
     responses: {
       wake: "Oui ? Comment puis-je aider ?",
@@ -67,16 +71,17 @@ export const frFR = {
     web: { label: "Navigation Web", desc: "Recherches Web en temps réel." },
     accessibility: { label: "Controle d'Accessibilité", desc: "Interagir avec d'autres apps." }
   },
+  suggestions: {
+    news: { label: "Résumer les Infos", prompt: "Quelles sont les nouvelles les plus importantes aujourd'hui ?" },
+    social: { label: "Réseaux Sociaux", prompt: "Résume ce qui se passe sur mes réseaux sociaux." },
+    youtube: { label: "Recherche YouTube", prompt: "Cherche des vidéos sur l'IA sur YouTube." },
+    write: { label: "Écrire un Email", prompt: "Aide-moi à rédiger un e-mail professionnel." }
+  },
   boot: [
-    "> NOYAU OSAI v3.1.0-STABLE",
+    "> NOYAU OSAI v3.2.0-STABLE",
     "> INITIALISATION CORE_COGNITIF...",
-    "> CHARGEMENT RÉSEAUX_NEURONAUX: GEMINI-3-PRO",
-    "> VÉRIFICATION POLITIQUE_SYSTÈME: ENCLAVE_SÉCURISÉE",
-    "> AUTHENTIFICATION COUCHE_ABSTRACTION_MATÉRIEL",
-    "> ÉTABLISSEMENT Z-INDEX_OVERLAY: 999",
-    "> MATRICE_MICROPHONE: EN LIGNE",
-    "> MODULE_LECTURE_ÉCRAN: ACTIF",
-    "> LISTE_CONTRÔLE_ACCÈS: MISE À JOUR",
+    "> CONNAISSANCE_SYSTÈME: CHARGÉ",
+    "> CHARGEMENT OUTILS_ACTIFS",
     "> PRÊT."
   ]
 };

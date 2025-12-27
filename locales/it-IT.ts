@@ -3,7 +3,7 @@ export const itIT = {
   name: "Italiano",
   ui: {
     coreTitle: "OSAI CORE",
-    systemActive: "Sistema Attivo v3.1",
+    systemActive: "Sistema Attivo v3.2",
     statusCardCore: "Nucleo",
     statusCardMemory: "Memoria",
     monitorTitle: "Monitor Bus",
@@ -36,7 +36,10 @@ export const itIT = {
     payload: "Carico utile: ",
     success: "Successo: ",
     riskProtocol: "Protocollo di Rischio",
-    systemLogs: "LOG DI SISTEMA"
+    systemLogs: "LOG DI SISTEMA",
+    executingFunction: "Esecuzione Funzione Attiva",
+    sources: "Fonti di Ricerca:",
+    suggestions: "Suggerimenti Proattivi"
   },
   ai: {
     status: {
@@ -46,7 +49,8 @@ export const itIT = {
       DOUBLE_CONFIRMATION: "Conferma N2",
       EXECUTING: "Azione...",
       ERROR: "Errore",
-      OFFLINE: "Offline"
+      OFFLINE: "Offline",
+      CALLING: "Chiamata Strumento"
     },
     responses: {
       wake: "Sì? Come posso aiutare?",
@@ -67,16 +71,17 @@ export const itIT = {
     web: { label: "Navigazione Web", desc: "Ricerche Web in tempo reale." },
     accessibility: { label: "Controllo Accesso", desc: "Interazione con le app." }
   },
+  suggestions: {
+    news: { label: "Riassumi Notizie", prompt: "Quali sono le notizie più importanti di oggi?" },
+    social: { label: "Social Media", prompt: "Riassumi cosa sta succedendo sui miei social." },
+    youtube: { label: "Cerca YouTube", prompt: "Cerca video sull'IA su YouTube." },
+    write: { label: "Scrivi Email", prompt: "Aiutami a scrivere un'e-mail professionale." }
+  },
   boot: [
-    "> KERNEL OSAI v3.1.0-STABILE",
-    "> INIZIALIZZAZIONE CORE_COGNITIVO...",
-    "> CARICAMENTO RETI_NEURALI: GEMINI-3-PRO",
-    "> CONTROLLO POLITICA_SISTEMA: ENCLAVE_SICURO",
-    "> AUTENTICAZIONE LIVELLO_ASTRAZIONE_HARDWARE",
-    "> STABILIMENTO Z-INDEX_OVERLAY: 999",
-    "> MATRICE_MICROFONO: ONLINE",
-    "> MODULO_LETTURA_SCHERMO: ATTIVO",
-    "> ELENCO_CONTROLLO_ACCESSO: AGGIORNATO",
+    "> KERNEL OSAI v3.2.0-STABILE",
+    "> INIZIALIZZAZIONE...",
+    "> CONOSCENZA SISTEMA CARICATA",
+    "> STRUMENTI ATTIVI CARICATI",
     "> PRONTO."
   ]
 };

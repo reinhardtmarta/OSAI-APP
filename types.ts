@@ -24,20 +24,16 @@ export enum CognitiveProfile {
   CRITICAL = 'CRITICAL'
 }
 
-// Added missing AIIntent type for classification and suggestion metadata
-export type AIIntent = 'WRITING' | 'CODING' | 'ANALYSIS' | 'IDEATION' | 'SYSTEM' | 'EMERGENCY' | 'LEARNING' | 'WEB_SEARCH';
+export type AIIntent = 'WRITING' | 'CODING' | 'ANALYSIS' | 'IDEATION' | 'SYSTEM' | 'EMERGENCY' | 'LEARNING' | 'WEB_SEARCH' | 'SOCIAL_MEDIA' | 'MEDIA_CONTROL';
 
-// Added missing CriticalityLevel type for safety protocols
 export type CriticalityLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 
-// Added missing PlatformType enum for platform detection logic
 export enum PlatformType {
   ANDROID = 'ANDROID',
   IOS = 'IOS',
   WEB = 'WEB'
 }
 
-// Added missing PlatformCapabilities interface for hardware feature detection
 export interface PlatformCapabilities {
   hasSystemOverlay: boolean;
   hasBackgroundListening: boolean;
@@ -63,8 +59,8 @@ export interface SecurityPolicy {
   canReadScreen: boolean;
   fullAppControl?: boolean;
   isPassiveListeningEnabled: boolean;
-  isAiMicrophoneEnabled: boolean; // Escuta de Wake Word
-  isUserMicrophoneEnabled: boolean; // Entrada de voz manual
+  isAiMicrophoneEnabled: boolean;
+  isUserMicrophoneEnabled: boolean;
   isCriticalAssistiveMode: boolean;
 }
 
@@ -105,8 +101,7 @@ export interface Suggestion {
   description: string;
   riskLevel: 'LOW' | 'MEDIUM' | 'HIGH';
   context: string;
-  type?: 'code' | 'system' | 'network' | 'emergency' | 'call' | 'research' | 'communication';
-  // Updated intent to use AIIntent type and added missing criticality property
+  type?: 'code' | 'system' | 'network' | 'emergency' | 'call' | 'research' | 'communication' | 'tool_call';
   intent?: AIIntent;
   criticality?: CriticalityLevel;
   reasoning?: string;
@@ -117,6 +112,8 @@ export interface Suggestion {
   isSafetyVerified?: boolean;
   payload?: string;
   interactionBarrier?: 'CAPTCHA' | 'PAYWALL' | 'NONE';
+  groundingUrls?: {uri: string, title?: string}[];
+  toolCalls?: any[];
 }
 
 export interface AppSettings {
@@ -150,7 +147,7 @@ export interface AIProvider {
 
 export interface AuditEvent {
   timestamp: number;
-  category: 'SECURITY' | 'SYSTEM' | 'PRIVACY' | 'TASK' | 'ERROR';
+  category: 'SECURITY' | 'SYSTEM' | 'PRIVACY' | 'TASK' | 'ERROR' | 'TOOL';
   state: AIStatus;
   message: string;
   data?: any;

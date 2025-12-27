@@ -20,4 +20,7 @@ export const locales: Record<SupportedLanguage, any> = {
   'ja-JP': jaJP,
 };
 
-export const getTranslation = (lang: SupportedLanguage) => locales[lang] || ptBR;
+/**
+ * Fallback to English (en-US) if language is not supported or missing.
+ */
+export const getTranslation = (lang: SupportedLanguage) => locales[lang] || enUS;

@@ -3,7 +3,7 @@ export const jaJP = {
   name: "日本語",
   ui: {
     coreTitle: "OSAI コア",
-    systemActive: "システム稼働中 v3.1",
+    systemActive: "システム稼働中 v3.2",
     statusCardCore: "コア",
     statusCardMemory: "メモリ",
     monitorTitle: "バスモニター",
@@ -36,7 +36,10 @@ export const jaJP = {
     payload: "ペイロード: ",
     success: "成功: ",
     riskProtocol: "リスクプロトコル",
-    systemLogs: "システムログ"
+    systemLogs: "システムログ",
+    executingFunction: "アクティブ機能を実行中",
+    sources: "検索ソース:",
+    suggestions: "先読み提案"
   },
   ai: {
     status: {
@@ -46,7 +49,8 @@ export const jaJP = {
       DOUBLE_CONFIRMATION: "L2 二次確認",
       EXECUTING: "実行中...",
       ERROR: "エラー",
-      OFFLINE: "オフライン"
+      OFFLINE: "オフライン",
+      CALLING: "ツールを呼び出し中"
     },
     responses: {
       wake: "はい、何かお手伝いしましょうか？",
@@ -67,16 +71,17 @@ export const jaJP = {
     web: { label: "ウェブ閲覧", desc: "リアルタイム検索。" },
     accessibility: { label: "アクセシビリティ", desc: "アプリとの連携。" }
   },
+  suggestions: {
+    news: { label: "ニュースの要約", prompt: "今日の重要なニュースは何ですか？" },
+    social: { label: "SNSまとめ", prompt: "ソーシャルメディアの最新情報をまとめて。" },
+    youtube: { label: "YouTube検索", prompt: "YouTubeでAIの動画を探して。" },
+    write: { label: "メール作成", prompt: "ビジネスメールの作成を伝って。" }
+  },
   boot: [
-    "> OSAI カーネル v3.1.0-STABLE",
-    "> 認知コアを初期化中...",
-    "> ニューラルネットワークをロード中: GEMINI-3-PRO",
-    "> システムポリシーを確認中: 安全なエンクレーブ",
-    "> ハードウェア抽象化レイヤーを認証中",
-    "> オーバーレイ Z-INDEX を設定中: 999",
-    "> マイクアレイ: オンライン",
-    "> スクリーンリーダーモジュール: アクティブ",
-    "> アクセス制御リスト: 更新済み",
+    "> OSAI カーネル v3.2.0-STABLE",
+    "> 初期化中...",
+    "> システム知識ロード完了",
+    "> アクティブツールロード完了",
     "> 準備完了。"
   ]
 };

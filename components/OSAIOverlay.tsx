@@ -3,14 +3,13 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Suggestion, AIStatus, AIMode, UIConfig, SupportedLanguage, CognitiveProfile } from '../types';
 import { PolicyEngine } from '../services/policyEngine';
 import { SpeechEngine } from '../services/voice/speechEngine';
-import { AudioVisualizer } from './ui/AudioVisualizer';
 import { ChatBubble } from './chat/ChatBubble';
-import { aiManager } from '../services/aiManager';
+import { Suggestions } from './chat/Suggestions';
 import { Haptics } from '../services/haptics';
 import { getTranslation } from '../locales';
+import { ToolExecutor } from '../services/tools/toolExecutor';
 import { 
-  Cpu, Minus, Mic, MicOff, Maximize2, 
-  Trash2, ShieldCheck, SendHorizonal, Activity
+  Cpu, Minus, Mic, MicOff, SendHorizonal, Activity, Volume2, VolumeX, Speaker, BrainCircuit
 } from 'lucide-react';
 
 interface OSAIOverlayProps {
@@ -30,310 +29,217 @@ interface OSAIOverlayProps {
   onDeny: (reason?: string) => void;
   onAnalyze: (customPrompt?: string) => void;
   onUpdatePolicy: (key: string, value: boolean) => void;
+  onLog: (msg: string, type?: 'info' | 'error' | 'success' | 'task') => void;
   onClose: () => void;
 }
 
 export const OSAIOverlay: React.FC<OSAIOverlayProps> = ({ 
-  status, suggestion, ui, lang, canListen, isPassiveListening, isAiMicEnabled, isUserMicEnabled,
-  isTtsEnabled, isAccessibilityMode, onApprove, onDeny, onAnalyze
+  status, suggestion, ui, lang, isTtsEnabled, onAnalyze, onLog
 }) => {
-  const [history, setHistory] = useState<{role: 'user' | 'ai' | 'system' | 'thinking', text: string, id: string, steps?: string[], riskLevel?: any}[]>([]);
+  const [history, setHistory] = useState<{role: 'user' | 'ai' | 'system' | 'thinking', text: string, id: string, reasoning?: string, steps?: string[]}[]>([]);
   const [input, setInput] = useState('');
   const [interimInput, setInterimInput] = useState('');
   const [isMinimized, setIsMinimized] = useState(false);
   const [isAwake, setIsAwake] = useState(false);
-  const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
-  const [frequencies, setFrequencies] = useState<number[]>([0, 0, 0, 0, 0]);
+  const [isSpeaking, setIsSpeaking] = useState(false);
   
   const speechEngineRef = useRef<SpeechEngine | null>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const analyzerRef = useRef<AnalyserNode | null>(null);
-  const animationFrameRef = useRef<number | null>(null);
-  const mediaStreamRef = useRef<MediaStream | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const lastProcessedSuggestionId = useRef<string | null>(null);
+  const lastProcessedId = useRef<string | null>(null);
+  const ttsTimeoutRef = useRef<any>(null);
   
   const t = getTranslation(lang);
 
-  useEffect(() => {
-    const loadVoices = () => setAvailableVoices(window.speechSynthesis.getVoices());
-    loadVoices();
-    window.speechSynthesis.onvoiceschanged = loadVoices;
-    const greeting = aiManager.getGreeting(lang);
-    setHistory([{ role: 'ai', text: greeting, id: 'init-' + Date.now() }]);
-  }, [lang]);
+  const speak = useCallback((text: string) => {
+    if (!text || !isTtsEnabled) return;
+    
+    window.speechSynthesis.cancel();
+    if (ttsTimeoutRef.current) clearTimeout(ttsTimeoutRef.current);
 
-  useEffect(() => {
-    if (suggestion && suggestion.description && suggestion.id !== lastProcessedSuggestionId.current) {
-      lastProcessedSuggestionId.current = suggestion.id;
-      setHistory(prev => {
-        const filtered = prev.filter(m => m.role !== 'thinking');
-        return [...filtered, { 
-          role: 'ai', 
-          text: suggestion.description, 
-          id: suggestion.id,
-          steps: suggestion.steps,
-          riskLevel: suggestion.riskLevel
-        }];
-      });
-      if (isTtsEnabled) speak(suggestion.description);
-      Haptics.medium();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = lang;
+    u.onstart = () => setIsSpeaking(true);
+    u.onend = () => setIsSpeaking(false);
+    u.onerror = () => setIsSpeaking(false);
+
+    ttsTimeoutRef.current = setTimeout(() => {
+      window.speechSynthesis.speak(u);
+    }, 100);
+  }, [lang, isTtsEnabled]);
+
+  const toggleMic = () => {
+    Haptics.medium();
+    const newState = !isAwake;
+    setIsAwake(newState);
+    
+    if (newState) {
+      speechEngineRef.current?.start();
+      speak(t.ai.responses.listening);
+    } else {
+      speechEngineRef.current?.stop();
+      setInterimInput('');
     }
-  }, [suggestion, isTtsEnabled]);
+  };
+
+  const handleVoiceResult = useCallback((final: string, interim: string) => {
+    if (!isAwake) return;
+    setInterimInput(interim);
+    if (final) {
+      setInterimInput('');
+      handleManualSubmit(final);
+    }
+  }, [isAwake]);
 
   useEffect(() => {
+    if (!speechEngineRef.current) {
+      speechEngineRef.current = new SpeechEngine(
+        lang, 
+        handleVoiceResult, 
+        (err) => onLog(`Mic Error: ${err}`, 'error'),
+        () => {}
+      );
+    }
+    speechEngineRef.current.updateLanguage(lang);
+    if (isAwake) speechEngineRef.current.start();
+    else speechEngineRef.current.stop();
+
+    return () => { speechEngineRef.current?.stop(); };
+  }, [lang, handleVoiceResult, onLog]);
+
+  const handleManualSubmit = (text?: string) => {
+    const val = text || input.trim();
+    if (!val) return;
+    
+    // Add user message to history
+    setHistory(prev => [...prev, { role: 'user', text: val, id: 'u-' + Date.now() }]);
+    onAnalyze(val);
+    setInput('');
+  };
+
+  useEffect(() => {
+    if (suggestion && suggestion.id !== lastProcessedId.current) {
+      lastProcessedId.current = suggestion.id;
+      
+      const newEntry = { 
+        role: 'ai' as const, 
+        text: suggestion.description, 
+        id: suggestion.id,
+        reasoning: suggestion.reasoning,
+        steps: suggestion.steps
+      };
+
+      // Ensure we keep the full history and just remove the 'thinking' placeholder if it exists
+      setHistory(prev => [...prev.filter(m => m.role !== 'thinking'), newEntry]);
+      
+      if (isTtsEnabled) speak(suggestion.description);
+
+      if (suggestion.toolCalls) {
+        suggestion.toolCalls.forEach(call => {
+          ToolExecutor.execute(call.name, call.args).then(res => {
+            onLog(res, 'success');
+            setHistory(prev => [...prev, { role: 'system', text: res, id: 'sys-' + Date.now() }]);
+          });
+        });
+      }
+    }
+  }, [suggestion, isTtsEnabled, speak, onLog]);
+
+  useEffect(() => {
+    // Only show thinking if we aren't already ready with a suggestion
     if (status === AIStatus.ANALYZING) {
-      setHistory(prev => [...prev, { role: 'thinking', text: '', id: 'thinking-' + Date.now() }]);
+      setHistory(prev => {
+        // Prevent duplicate thinking bubbles
+        if (prev[prev.length - 1]?.role === 'thinking') return prev;
+        return [...prev, { role: 'thinking', text: 'Analysing core...', id: 'think-' + Date.now() }];
+      });
+    } else if (status === AIStatus.IDLE || status === AIStatus.READY) {
+      setHistory(prev => prev.filter(m => m.role !== 'thinking'));
     }
   }, [status]);
 
   useEffect(() => {
     if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollTo({
-        top: scrollContainerRef.current.scrollHeight,
-        behavior: 'smooth'
-      });
+      scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
     }
   }, [history, interimInput]);
 
-  const speak = useCallback((text: string) => {
-    if (!text) return;
-    window.speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    const preferredVoice = availableVoices.find(v => v.lang === lang) || 
-                          availableVoices.find(v => v.lang.startsWith(lang.split('-')[0])) ||
-                          availableVoices.find(v => v.default);
-    if (preferredVoice) u.voice = preferredVoice;
-    u.lang = lang;
-    u.rate = 1.05;
-    window.speechSynthesis.speak(u);
-  }, [lang, availableVoices]);
-
-  const handleManualSubmit = () => {
-    if (!input.trim()) return;
-    const text = input.trim();
-    setHistory(prev => [...prev, { role: 'user', text, id: 'user-' + Date.now() }]);
-    onAnalyze(text);
-    setInput('');
-    Haptics.light();
-  };
-
-  const clearHistory = () => {
-    Haptics.heavy();
-    setHistory([{ role: 'system', text: t.ui.waitingPulse, id: 'clear-' + Date.now() }]);
-  };
-
-  const setupAudioAnalyzer = async () => {
-    if (mediaStreamRef.current) return;
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaStreamRef.current = stream;
-      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const source = audioCtx.createMediaStreamSource(stream);
-      const analyzer = audioCtx.createAnalyser();
-      analyzer.fftSize = 64;
-      source.connect(analyzer);
-      audioContextRef.current = audioCtx;
-      analyzerRef.current = analyzer;
-      const dataArray = new Uint8Array(analyzer.frequencyBinCount);
-      const update = () => {
-        if (!analyzerRef.current) return;
-        analyzerRef.current.getByteFrequencyData(dataArray);
-        const bands = [0, 0, 0, 0, 0];
-        const step = Math.floor(dataArray.length / 5);
-        for (let i = 0; i < 5; i++) {
-          let sum = 0;
-          for (let j = 0; j < step; j++) sum += dataArray[i * step + j];
-          bands[i] = Math.min(100, (sum / step) * 0.8);
-        }
-        setFrequencies(bands);
-        animationFrameRef.current = requestAnimationFrame(update);
-      };
-      update();
-    } catch (e) { console.debug("Audio analyzer unavailable"); }
-  };
-
-  const stopAudioAnalyzer = () => {
-    if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
-    if (mediaStreamRef.current) mediaStreamRef.current.getTracks().forEach(track => track.stop());
-    if (audioContextRef.current) audioContextRef.current.close();
-    mediaStreamRef.current = null;
-    audioContextRef.current = null;
-    analyzerRef.current = null;
-    setFrequencies([0, 0, 0, 0, 0]);
-  };
-
-  const handleVoiceResult = useCallback((final: string, interim: string) => {
-    if (interim) setInterimInput(interim);
-    if (final) {
-      setInterimInput('');
-      const transcript = final.trim();
-      if (transcript.length < 2) return;
-
-      if (isAiMicEnabled && !isAwake && PolicyEngine.detectWakeWord(transcript)) {
-        setIsAwake(true);
-        const wakeMsg = t.ai.responses.wake;
-        setHistory(prev => [...prev, { role: 'ai', text: wakeMsg, id: 'wake-' + Date.now() }]);
-        speak(wakeMsg);
-        Haptics.success();
-        return;
-      }
-
-      if (isAwake || isPassiveListening || isUserMicEnabled) {
-        setHistory(prev => [...prev, { role: 'user', text: transcript, id: 'user-' + Date.now() }]);
-        onAnalyze(transcript);
-        setIsAwake(false);
-        Haptics.light();
-      }
-    }
-  }, [isAiMicEnabled, isUserMicEnabled, isAwake, isPassiveListening, t, onAnalyze, speak]);
-
-  useEffect(() => {
-    const micAnyEnabled = isAiMicEnabled || isUserMicEnabled;
-    if (!speechEngineRef.current && micAnyEnabled) {
-      speechEngineRef.current = new SpeechEngine(
-        lang,
-        handleVoiceResult,
-        () => {},
-        () => { if (micAnyEnabled && canListen) speechEngineRef.current?.start(); }
-      );
-    }
-    
-    if (micAnyEnabled && canListen) {
-      speechEngineRef.current?.start();
-      setupAudioAnalyzer();
-    } else {
-      speechEngineRef.current?.stop();
-      stopAudioAnalyzer();
-    }
-    
-    return () => {
-      speechEngineRef.current?.stop();
-      stopAudioAnalyzer();
-    };
-  }, [isAiMicEnabled, isUserMicEnabled, canListen, lang, handleVoiceResult]);
-
-  const anyMicActive = isAiMicEnabled || isUserMicEnabled;
-
   return (
-    <div 
-      className="fixed bottom-4 right-4 z-[999] pointer-events-none" 
-      style={{ transform: `scale(${ui.scale})`, opacity: ui.transparency }}
-      aria-live="polite"
-    >
-      <div 
-        role="complementary"
-        aria-label="OSAI Overlay Assistant"
-        className={`pointer-events-auto glass rounded-[44px] border-2 transition-all duration-500 shadow-2xl flex flex-col ${isMinimized ? 'w-20 h-20' : 'w-85 h-[620px] max-h-[85vh]'} ${
-        !anyMicActive ? 'border-slate-700 bg-slate-900/40' :
-        isAwake ? 'border-blue-400 bg-blue-950/20 shadow-[0_0_40px_rgba(37,99,235,0.1)]' :
-        status === AIStatus.READY ? 'border-yellow-400 bg-yellow-950/10' : 'border-white/10'
-      }`}>
-        <div className="p-5 flex items-center justify-between border-b border-white/5 shrink-0 bg-white/5 rounded-t-[44px]">
+    <div className="fixed bottom-6 right-6 z-[999] pointer-events-none" style={{ transform: `scale(${ui.scale})`, opacity: ui.transparency }}>
+      <div className={`pointer-events-auto glass rounded-[40px] border-2 shadow-2xl flex flex-col transition-all overflow-hidden ${isMinimized ? 'w-20 h-20' : 'w-80 h-[600px]'} ${isAwake ? 'border-blue-500 shadow-[0_0_40px_rgba(37,99,235,0.3)]' : 'border-white/10'}`}>
+        
+        <div className="p-4 flex items-center justify-between border-b border-white/5 bg-white/5 shrink-0">
           <div className="flex items-center gap-3">
-            <div 
-              className={`p-2.5 rounded-full transition-all duration-300 relative ${!anyMicActive ? 'bg-slate-700' : isAwake ? 'bg-blue-600 shadow-[0_0_15px_rgba(37,99,235,0.5)]' : 'bg-slate-800'}`}
-              aria-hidden="true"
-            >
-              <Cpu className={`w-4 h-4 text-white ${status === AIStatus.ANALYZING ? 'animate-spin' : ''}`} />
-              {!anyMicActive && <div className="absolute -top-1 -right-1 bg-red-500 rounded-full p-0.5 border border-slate-900"><MicOff size={8} /></div>}
-            </div>
+            <Cpu size={18} className={status === AIStatus.ANALYZING ? 'animate-spin text-blue-400' : 'text-slate-400'} />
             {!isMinimized && (
               <div className="flex flex-col">
-                <span className="text-[10px] font-black uppercase text-white tracking-[0.15em]">{t.ui.coreTitle}</span>
-                <div className="flex items-center gap-1.5">
-                  <span className={`text-[7px] font-black uppercase tracking-widest ${!anyMicActive ? 'text-slate-400' : 'text-blue-500'}`}>
-                    {!anyMicActive ? t.ai.responses.muted : (t.ai.status[status] || status)}
-                  </span>
-                  {isAccessibilityMode && <ShieldCheck size={8} className="text-emerald-500" />}
-                </div>
+                <span className="text-[10px] font-black uppercase text-white tracking-widest leading-tight">{t.ui.coreTitle}</span>
+                <span className={`text-[8px] font-bold uppercase ${isAwake ? 'text-blue-400' : 'text-slate-500'}`}>{isAwake ? 'System Listening' : 'Waiting...'}</span>
               </div>
             )}
           </div>
-          <div className="flex items-center gap-1">
-            {!isMinimized && (
-              <button 
-                onClick={clearHistory} 
-                aria-label={t.ui.clearMemory}
-                className="p-2.5 hover:bg-white/10 rounded-xl text-white/30 transition-colors"
-              >
-                <Trash2 size={16} />
-              </button>
-            )}
-            <button 
-              onClick={() => { setIsMinimized(!isMinimized); Haptics.light(); }} 
-              aria-label={isMinimized ? "Maximize OSAI" : "Minimize OSAI"}
-              className="p-2.5 hover:bg-white/10 rounded-xl text-white/30 transition-colors"
-            >
-              {isMinimized ? <Maximize2 size={16} /> : <Minus size={16} />}
-            </button>
-          </div>
+          {!isMinimized && <button onClick={() => setIsMinimized(true)} className="p-2 text-white/40 hover:bg-white/5 rounded-xl"><Minus size={16} /></button>}
         </div>
 
-        {!isMinimized && (
+        {!isMinimized ? (
           <>
-            <div 
-              ref={scrollContainerRef} 
-              role="log"
-              aria-relevant="additions"
-              className="flex-1 overflow-y-auto p-5 space-y-6 bg-black/40 custom-scrollbar flex flex-col relative pb-10"
-            >
-              <div className="flex-1 space-y-5">
-                {history.map(m => (
-                  <ChatBubble key={m.id} role={m.role} text={m.text} steps={m.steps} riskLevel={m.riskLevel} lang={lang} />
-                ))}
-              </div>
-              
+            <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4 bg-black/20 custom-scrollbar flex flex-col scroll-smooth">
+              {history.map(m => (
+                <div key={m.id} className="space-y-1">
+                  {m.reasoning && (
+                    <div className="flex gap-2 items-start px-2 mb-1 opacity-60">
+                      <BrainCircuit size={10} className="text-blue-400 shrink-0 mt-0.5" />
+                      <div className="text-[9px] text-blue-400 italic">Thinking: {m.reasoning}</div>
+                    </div>
+                  )}
+                  <ChatBubble role={m.role} text={m.text} lang={lang} steps={m.steps} />
+                </div>
+              ))}
               {interimInput && (
-                <div className="sticky bottom-0 w-full flex justify-end pb-2 animate-in fade-in slide-in-from-right-4">
-                  <div className="max-w-[85%] p-4 rounded-[24px] bg-blue-600/30 text-blue-100 text-[11px] border border-blue-500/40 backdrop-blur-md italic flex flex-col gap-1">
-                    <span className="flex items-center gap-2 font-bold text-[9px] uppercase"><Activity size={10} className="text-blue-400 animate-pulse" /> {t.ai.responses.listening}...</span>
-                    <span className="opacity-80">{interimInput}</span>
+                <div className="text-[11px] text-blue-400/90 italic bg-blue-500/10 p-4 rounded-3xl border border-blue-500/10 animate-pulse flex items-center gap-3">
+                  <Activity size={14} /> <span>{interimInput}...</span>
+                </div>
+              )}
+              {isSpeaking && (
+                <div className="flex justify-center">
+                  <div className="flex items-center gap-2 px-3 py-1 bg-emerald-500/10 rounded-full border border-emerald-500/20">
+                    <Speaker size={10} className="text-emerald-400 animate-pulse" />
+                    <span className="text-[8px] font-black uppercase text-emerald-400">Reading Screen Content</span>
                   </div>
                 </div>
               )}
             </div>
 
-            <div className="p-6 border-t border-white/10 bg-black/80 backdrop-blur-3xl shrink-0 rounded-b-[44px]">
+            <div className="p-5 border-t border-white/10 bg-black/40 space-y-4 shrink-0">
+              <Suggestions onSelect={handleManualSubmit} lang={lang} />
               <div className="flex gap-3 items-center">
-                 <div className="relative flex-1">
-                    <input 
-                      value={input} 
-                      onChange={e => setInput(e.target.value)} 
-                      onKeyDown={e => { if(e.key === 'Enter') handleManualSubmit(); }} 
-                      placeholder={!isUserMicEnabled ? "..." : t.ai.responses.listening}
-                      aria-label="Manual command input"
-                      className="w-full bg-white/5 border border-white/10 rounded-[30px] pl-6 pr-14 py-4.5 text-[14px] text-white outline-none focus:border-blue-500/60 focus:bg-white/10 transition-all placeholder:text-white/20 shadow-inner" 
-                    />
-                    <button 
-                      onClick={handleManualSubmit} 
-                      aria-label="Send command"
-                      className="absolute right-4 top-1/2 -translate-y-1/2 text-blue-400 p-2 hover:scale-110 active:scale-95 transition-all"
-                    >
-                      <SendHorizonal size={22} />
-                    </button>
-                 </div>
-                 
-                 <div className="flex gap-2.5">
-                    {isUserMicEnabled && (
-                      <button 
-                        onClick={() => { Haptics.light(); speak(t.ai.responses.listening); }}
-                        aria-label="Activate voice recognition"
-                        className="w-15 h-15 rounded-[30px] flex items-center justify-center border-2 border-blue-500/30 bg-blue-500/10 text-blue-400 animate-in zoom-in shadow-lg active:scale-95"
-                      >
-                        <Mic size={24} />
-                      </button>
-                    )}
-                    <div 
-                      className="w-15 h-15 rounded-[30px] flex items-center justify-center border-2 border-white/10 bg-white/5 shadow-lg"
-                      aria-hidden="true"
-                    >
-                      <AudioVisualizer frequencies={frequencies} isMuted={!anyMicActive} />
-                    </div>
-                 </div>
+                <div className="relative flex-1">
+                  <input 
+                    value={input} 
+                    onChange={e => setInput(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleManualSubmit()}
+                    placeholder="Command or Question..."
+                    className="w-full bg-white/5 border border-white/10 rounded-3xl pl-5 pr-14 py-4 text-[13px] text-white outline-none focus:border-blue-500 transition-all"
+                  />
+                  <button onClick={() => handleManualSubmit()} className="absolute right-2 top-1/2 -translate-y-1/2 p-2.5 bg-blue-600 text-white rounded-full hover:scale-110 active:scale-95 transition-all">
+                    <SendHorizonal size={18} />
+                  </button>
+                </div>
+                <button 
+                  onClick={toggleMic}
+                  className={`p-4 rounded-full border transition-all ${isAwake ? 'bg-blue-600 border-blue-400 shadow-lg' : 'bg-white/5 border-white/10 text-slate-500'}`}
+                >
+                  {isAwake ? <Mic size={22} className="text-white" /> : <MicOff size={22} />}
+                </button>
               </div>
             </div>
           </>
+        ) : (
+          <div onClick={() => setIsMinimized(false)} className="flex-1 flex items-center justify-center cursor-pointer group">
+            <div className="relative">
+              <Cpu size={32} className={`${isAwake ? 'text-blue-400' : 'text-slate-500'} transition-all ${status === AIStatus.ANALYZING ? 'animate-spin' : 'group-hover:scale-110'}`} />
+              {isAwake && <div className="absolute inset-0 border-2 border-blue-400 rounded-full animate-ping opacity-20" />}
+            </div>
+          </div>
         )}
       </div>
     </div>

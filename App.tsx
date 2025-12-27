@@ -11,13 +11,13 @@ import { Haptics } from './services/haptics';
 import { getTranslation } from './locales';
 import { Settings, Cpu, ShieldCheck, Zap, Activity, Layers, Bell } from 'lucide-react';
 
-const SETTINGS_KEY = 'osai_user_settings_v32';
+const SETTINGS_KEY = 'osai_user_settings_v33';
 
 const DEFAULT_SETTINGS: AppSettings = {
   isOsaiEnabled: true,
   isAiEnabled: true,
   isAccessibilityMode: false,
-  mode: AIMode.PASSIVE,
+  mode: AIMode.ACTIVE, // Default to Active for faster proactivity
   cognitiveProfile: CognitiveProfile.NORMAL,
   policy: {
     blockDangerousKeywords: true,
@@ -48,7 +48,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     learningLimitDays: 30,
     allowSuggestions: true, 
     voiceWakeWord: true,
-    language: 'pt-BR',
+    language: 'en-US', // FORCED DEFAULT TO ENGLISH
     showAiLog: true,
     isTtsEnabled: true
   }
@@ -62,6 +62,7 @@ const App: React.FC = () => {
   });
 
   const [logs, setLogs] = useState<string[]>([]);
+  const lastMsgRef = useRef<string>('');
   const [status, setStatus] = useState<AIStatus>(navigator.onLine ? AIStatus.IDLE : AIStatus.OFFLINE);
   const [currentSuggestion, setCurrentSuggestion] = useState<Suggestion | null>(null);
   const [showSettings, setShowSettings] = useState(false);
@@ -70,36 +71,16 @@ const App: React.FC = () => {
   const t = getTranslation(settings.data.language);
 
   const addLog = useCallback((msg: string, type: 'info' | 'error' | 'success' | 'task' = 'info') => {
+    if (msg === lastMsgRef.current) return;
+    lastMsgRef.current = msg;
     const prefix = { info: '•', error: '!', success: '✓', task: '>>' }[type];
     const timestamp = new Date().toLocaleTimeString(settings.data.language, { hour12: false });
-    setLogs(prev => [...prev.slice(-99), `[${timestamp}] ${prefix} ${msg}`]);
+    setLogs(prev => [...prev.slice(-49), `[${timestamp}] ${prefix} ${msg}`]);
   }, [settings.data.language]);
 
-  useEffect(() => {
-    const handleOnline = () => { setStatus(AIStatus.IDLE); addLog(t.ui.online, "success"); };
-    const handleOffline = () => { setStatus(AIStatus.OFFLINE); addLog(t.ui.offline, "error"); };
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, [t.ui.online, t.ui.offline, addLog]);
-
-  useEffect(() => {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-  }, [settings]);
-
   const handleAnalyze = async (customPrompt?: string) => {
-    if (status === AIStatus.OFFLINE) {
-       addLog(t.ai.status.OFFLINE, "error");
-       Haptics.error();
-       return;
-    }
-    if (status === AIStatus.SUSPENDED || !settings.isAiEnabled) return;
-    
+    if (status === AIStatus.OFFLINE) return;
     setStatus(AIStatus.ANALYZING);
-    addLog(`${t.ui.reqCognitive}"${customPrompt}"`, 'info');
     
     try {
       const suggestion = await aiManager.getSuggestion({
@@ -110,114 +91,81 @@ const App: React.FC = () => {
       });
       
       if (suggestion) {
-        const policyResult = PolicyEngine.validate(suggestion, settings);
-        if (!policyResult.allowed) {
-          addLog(`${t.ui.policyRejection}${policyResult.reason}`, 'error');
-          setStatus(AIStatus.ERROR);
-          Haptics.error();
-          setTimeout(() => setStatus(AIStatus.IDLE), 3000);
-          return;
-        }
-        
-        needsDoubleConfirmRef.current = policyResult.requireDoubleConfirmation;
+        const mustDoubleConfirm = settings.policy.isCriticalAssistiveMode || 
+                             suggestion.riskLevel === 'MEDIUM' || 
+                             suggestion.riskLevel === 'HIGH';
+
+        needsDoubleConfirmRef.current = mustDoubleConfirm;
         setStatus(suggestion.isSuggestion ? AIStatus.READY : AIStatus.IDLE);
         setCurrentSuggestion(suggestion);
-        if (suggestion.isSuggestion) Haptics.medium();
-      } else {
-        setStatus(AIStatus.ERROR);
-        addLog(t.ui.malformed, "error");
-        Haptics.error();
+        addLog(`Cognitive result received`, 'info');
       }
     } catch (err) {
       setStatus(AIStatus.ERROR);
-      addLog(`${t.ui.busFail}${err}`, "error");
-      Haptics.error();
+      addLog(`Bus Fault: Logic Engine Unreachable`, "error");
     }
   };
 
   const handleApprove = async () => {
     if (!currentSuggestion) return;
-
-    if (status === AIStatus.READY && needsDoubleConfirmRef.current) {
-      setStatus(AIStatus.DOUBLE_CONFIRMATION);
-      addLog(t.ui.doubleConfirmReq, "info");
-      Haptics.heavy();
-      return;
-    }
-
     setStatus(AIStatus.EXECUTING);
-    addLog(`${t.ui.payload}${currentSuggestion.action}`, 'task');
-    Haptics.medium();
-    
-    await new Promise(r => setTimeout(r, 1500));
-    
-    addLog(`${t.ui.success}${currentSuggestion.description.substring(0, 30)}...`, 'success');
+    addLog(`Executing Action: ${currentSuggestion.action}`, 'task');
     Haptics.success();
     setStatus(AIStatus.IDLE);
     setCurrentSuggestion(null);
   };
 
-  const handleUpdatePolicy = (key: string, value: any) => {
-    setSettings(prev => ({
-      ...prev,
-      policy: {
-        ...prev.policy,
-        [key]: value
-      }
-    }));
-  };
+  useEffect(() => {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  }, [settings]);
 
-  if (isBooting) return <BootSequence lang={settings.data.language} onComplete={() => { setIsBooting(false); Haptics.success(); }} />;
+  if (isBooting) return <BootSequence lang={settings.data.language} onComplete={() => { setIsBooting(false); addLog("OSAI Core Online", "success"); }} />;
 
   return (
     <div className="fixed inset-0 bg-[#020617] text-white selection:bg-blue-500/30 overflow-hidden flex flex-col font-sans">
-      <header className="h-20 border-b border-white/5 glass px-6 flex items-center justify-between shrink-0 z-50">
-        <div className="flex items-center space-x-4">
-          <div className="p-3 bg-blue-600/10 rounded-2xl border border-blue-500/20 shadow-[0_0_20px_rgba(37,99,235,0.1)] relative">
-            <Cpu className="text-blue-400 w-5 h-5 animate-float" />
-            <div className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-500 rounded-full border-2 border-[#020617] animate-pulse" />
+      <header className="h-24 border-b border-white/5 glass px-8 flex items-center justify-between shrink-0 z-50">
+        <div className="flex items-center space-x-6">
+          <div className="p-4 bg-blue-600/10 rounded-3xl border border-blue-500/20 shadow-[0_0_30px_rgba(37,99,235,0.15)] relative group cursor-pointer">
+            <Cpu className="text-blue-400 w-6 h-6 animate-float" />
+            <div className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full border-4 border-[#020617] animate-pulse" />
           </div>
           <div>
-            <h1 className="font-extrabold text-[12px] tracking-[0.2em] text-white">{t.ui.coreTitle}</h1>
-            <div className="flex items-center gap-2 mt-0.5">
-               <span className="text-[8px] text-slate-500 font-bold uppercase tracking-widest flex items-center gap-1.5">
-                  <ShieldCheck size={10} className="text-emerald-500" /> {t.ui.systemActive}
-               </span>
+            <h1 className="font-black text-[14px] tracking-[0.3em] text-white uppercase">{t.ui.coreTitle}</h1>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-[9px] text-slate-500 font-black uppercase tracking-widest flex items-center gap-2 bg-white/5 px-2 py-0.5 rounded-full">
+                <ShieldCheck size={11} className="text-emerald-500" /> {t.ui.systemActive}
+              </span>
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button className="p-3 bg-white/5 rounded-2xl border border-white/10 relative">
-            <Bell size={18} className="text-slate-400" />
-            <div className="absolute top-2.5 right-2.5 w-1.5 h-1.5 bg-blue-500 rounded-full" />
-          </button>
+        <div className="flex items-center gap-4">
+          <div className="hidden md:flex flex-col items-end mr-4">
+             <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">Active Language</span>
+             <span className="text-[11px] font-bold text-blue-400">{t.name}</span>
+          </div>
           <button 
             onClick={() => { setShowSettings(true); Haptics.light(); }} 
-            className="p-3 bg-white/5 rounded-2xl border border-white/10 hover:bg-white/10 transition-all active:scale-90"
+            className="p-4 bg-white/5 rounded-3xl border border-white/10 hover:bg-white/10 hover:border-blue-500/30 transition-all active:scale-90 shadow-xl"
           >
-            <Settings size={20} className="text-slate-400" />
+            <Settings size={22} className="text-slate-400" />
           </button>
         </div>
       </header>
 
-      <main className="flex-1 p-6 space-y-6 overflow-y-auto custom-scrollbar">
-        <div className="grid grid-cols-2 gap-4">
-          <StatusCard label={t.ui.statusCardCore} value={t.ui.ready.split(' / ')[0]} icon={Zap} color="text-emerald-400" sub={t.ui.latency} />
-          <StatusCard label={t.ui.statusCardMemory} value="84 MB" icon={Layers} color="text-blue-400" sub={t.ui.localCognition} />
+      <main className="flex-1 p-8 space-y-8 overflow-y-auto custom-scrollbar bg-gradient-to-b from-transparent to-black/20">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          <StatusCard label={t.ui.statusCardCore} value="ONLINE" icon={Zap} color="text-emerald-400" sub={t.ui.latency} />
+          <StatusCard label={t.ui.statusCardMemory} value={t.ui.ready.split('/')[0]} icon={Layers} color="text-blue-400" sub={t.ui.localCognition} />
         </div>
 
-        <div className="glass rounded-[32px] p-6 border border-white/5 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em] flex items-center gap-2">
-              <Activity size={12} className="text-blue-500" /> {t.ui.monitorTitle}
-            </h2>
+        <div className="glass rounded-[48px] p-8 border border-white/5 space-y-6 shadow-2xl relative overflow-hidden">
+          <div className="absolute top-0 right-0 p-8 opacity-5 pointer-events-none">
+            <Activity size={120} className="text-blue-500" />
           </div>
+          <h2 className="text-[11px] font-black uppercase text-slate-500 tracking-[0.3em] flex items-center gap-3">
+            <Activity size={14} className="text-blue-500" /> {t.ui.monitorTitle}
+          </h2>
           <Terminal logs={logs} title={t.ui.systemLogs} waitingMessage={t.ui.waitingPulse} />
-        </div>
-
-        <div className="py-10 flex flex-col items-center justify-center opacity-20 gap-4 pointer-events-none">
-          <Cpu size={32} className="text-blue-500" />
-          <span className="text-[8px] font-black uppercase tracking-[0.5em] text-blue-500">{t.ui.overlayActive}</span>
         </div>
       </main>
 
@@ -235,9 +183,10 @@ const App: React.FC = () => {
         isTtsEnabled={settings.data.isTtsEnabled} 
         isAccessibilityMode={settings.isAccessibilityMode} 
         onApprove={handleApprove} 
-        onDeny={() => { setStatus(AIStatus.IDLE); setCurrentSuggestion(null); Haptics.error(); }} 
+        onDeny={() => { setStatus(AIStatus.IDLE); setCurrentSuggestion(null); Haptics.error(); addLog("Action Interrupted", "info"); }} 
         onAnalyze={handleAnalyze} 
-        onUpdatePolicy={handleUpdatePolicy} 
+        onUpdatePolicy={(k, v) => setSettings(s => ({...s, policy: {...s.policy, [k]: v}}))} 
+        onLog={addLog}
         onClose={() => {}}
       />
 
@@ -246,7 +195,7 @@ const App: React.FC = () => {
           settings={settings} 
           onUpdate={setSettings} 
           onClose={() => setShowSettings(false)} 
-          onPurgeMemory={() => aiManager.purgeMemory()} 
+          onPurgeMemory={() => { aiManager.purgeMemory(); addLog("Cognitive Cache Cleared", "error"); }} 
           onClearLogs={() => setLogs([])} 
         />
       )}
@@ -255,12 +204,12 @@ const App: React.FC = () => {
 };
 
 const StatusCard = ({ label, value, icon: Icon, color, sub }: any) => (
-  <div className="p-5 glass rounded-[32px] border border-white/5 flex flex-col gap-3 relative overflow-hidden group">
-    <div className={`p-2 w-fit rounded-xl bg-white/5 ${color}`}><Icon size={16} /></div>
+  <div className="p-6 glass rounded-[40px] border border-white/5 flex flex-col gap-4 relative overflow-hidden group hover:border-white/20 transition-all">
+    <div className={`p-3 w-fit rounded-2xl bg-white/5 ${color} group-hover:scale-110 transition-transform`}><Icon size={20} /></div>
     <div className="flex flex-col">
-      <span className="text-[9px] font-black uppercase text-slate-500 tracking-widest">{label}</span>
-      <span className="text-lg font-extrabold text-white leading-tight">{value}</span>
-      <span className="text-[8px] text-slate-600 font-bold uppercase mt-1">{sub}</span>
+      <span className="text-[10px] font-black uppercase text-slate-500 tracking-widest">{label}</span>
+      <span className="text-2xl font-black text-white leading-tight mt-1">{value}</span>
+      <span className="text-[9px] text-slate-600 font-bold uppercase mt-1 tracking-tighter">{sub}</span>
     </div>
   </div>
 );

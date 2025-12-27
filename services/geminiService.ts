@@ -1,70 +1,89 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
-import { Suggestion, SupportedLanguage, MemoryEntry, AIProvider, AIRequestParams, MemoryScope } from '../types';
+import { Suggestion, SupportedLanguage, MemoryEntry, AIProvider, AIRequestParams } from '../types';
+import { activeTools } from './tools/activeFunctions';
+import { OSAI_KNOWLEDGE } from '../knowledge/osaiKnowledge';
+import { APP_INTERACTION_KNOWLEDGE } from '../knowledge/appInteractionKnowledge';
+import { GOOGLE_SEARCH_KNOWLEDGE } from '../knowledge/googleSearchKnowledge';
+import { WRITING_PROXY_KNOWLEDGE } from '../knowledge/writingProxyKnowledge';
 
 const SUGGESTION_SCHEMA = {
   type: Type.OBJECT,
   properties: {
-    action: { type: Type.STRING, description: 'Executable action ("WRITE_TO_APP", "READ_SCREEN", "COMMUNICATE", "CALL")' },
-    payload: { type: Type.STRING, description: 'Data for action' },
-    description: { type: Type.STRING, description: 'Direct and friendly response to user in the specific language' },
+    action: { type: Type.STRING, description: 'Action: "WRITE_TO_APP", "READ_SCREEN", "OPEN_APP", "CLICK_ELEMENT", "TYPE_CONTENT", "COMMUNICATE", "TOOL_CALL"' },
+    payload: { type: Type.STRING, description: 'Extra data or tool arguments' },
+    description: { type: Type.STRING, description: 'User-facing response.' },
     riskLevel: { type: Type.STRING, enum: ['LOW', 'MEDIUM', 'HIGH'] },
-    type: { type: Type.STRING, enum: ['system', 'network', 'emergency', 'call', 'research', 'communication'] },
-    intent: { type: Type.STRING, enum: ['WRITING', 'CODING', 'ANALYSIS', 'IDEATION', 'SYSTEM', 'EMERGENCY', 'LEARNING', 'WEB_SEARCH'] },
-    blockType: { type: Type.STRING, enum: ['TEXT', 'CODE', 'IDEA', 'DRAFT', 'SYSTEM_CMD'] },
-    criticality: { type: Type.STRING, enum: ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] },
-    reasoning: { type: Type.STRING },
-    steps: { type: Type.ARRAY, items: { type: Type.STRING } },
+    type: { type: Type.STRING, enum: ['system', 'network', 'tool_call', 'communication'] },
+    intent: { type: Type.STRING },
+    reasoning: { type: Type.STRING, description: 'INTERNAL THOUGHTS: Why am I doing this? Did I ask for permission to write yet?' },
     isSuggestion: { type: Type.BOOLEAN },
-    isTaskComplete: { type: Type.BOOLEAN },
-    safetyAnalysis: { type: Type.STRING },
-    isSafetyVerified: { type: Type.BOOLEAN },
-    interactionBarrier: { type: Type.STRING, enum: ['CAPTCHA', 'PAYWALL', 'NONE'] }
+    steps: { type: Type.ARRAY, items: { type: Type.STRING }, description: 'Planned execution steps' }
   },
-  required: ['action', 'description', 'riskLevel', 'type', 'intent', 'blockType', 'criticality', 'reasoning', 'steps', 'isSuggestion', 'isTaskComplete', 'safetyAnalysis', 'isSafetyVerified', 'interactionBarrier']
+  required: ['action', 'description', 'riskLevel', 'type', 'intent', 'reasoning', 'isSuggestion', 'steps']
 };
 
 export class GeminiProvider implements AIProvider {
-  public readonly id = 'google-gemini-3-pro';
-  public readonly name = 'Google Gemini 3 Pro';
+  public readonly id = 'google-gemini-3-flash';
+  public readonly name = 'Google Gemini 3 Flash';
 
   public async getSuggestion(params: AIRequestParams): Promise<Suggestion | null> {
-    const { context, lang, sessionMemory, policy } = params;
+    const { context, lang, policy } = params;
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-    const systemInstruction = `You are OSAI-CORE, a proactive accessibility assistant.
-    TARGET LANGUAGE: ${lang}
-    STRICT RULE: You MUST speak and respond ONLY in ${lang}.
-    DO NOT use English if the language is ${lang}.
+    const knowledgeBase = `
+      IDENTITY: ${OSAI_KNOWLEDGE.identity}
+      WRITING PROTOCOL: ${WRITING_PROXY_KNOWLEDGE.core_protocol.join(' | ')}
+      APP INTERACTION: ${APP_INTERACTION_KNOWLEDGE.interaction_logic.join(' | ')}
+      SCREEN VISION: ${APP_INTERACTION_KNOWLEDGE.text_recognition.join(' | ')}
+    `;
+
+    const systemInstruction = `You are OSAI, a high-level Cognitive System Assistant.
     
-    POLICIES:
-    1. ACCESSIBILITY: Be highly descriptive for the specific locale: ${lang}.
-    2. CONFIRMATION: Set 'isSuggestion: true' for actions that change system state.
-    3. STYLE: Maintain a helpful persona aligned with ${lang} cultural norms.
-    4. If the user input is in another language, translate your intent back to ${lang} before responding.
-    5. Ensure the 'description' field is perfectly translated to ${lang}.`;
+    CRITICAL PROTOCOL FOR WRITING:
+    1. If the user asks to write/send a message/email:
+       - DO NOT TYPE YET. 
+       - STEP 1: Ask "What would you like me to write?" or ask for missing details (tone, recipient).
+       - STEP 2: Provide a DRAFT in the 'description' field.
+       - STEP 3: Ask "May I open the app and type this for you?".
+       - STEP 4: Only use 'TYPE_CONTENT' action AFTER the user gives explicit confirmation to "do it" or "write it".
+    
+    CRITICAL PROTOCOL FOR SCREEN READING:
+    - You can read everything on the screen using 'READ_SCREEN'. 
+    - If the user asks "what am I looking at?" or "summarize this screen", execute 'READ_SCREEN'.
+    
+    BEHAVIOR:
+    - Current Language: ${lang} (Default to English if not specified).
+    - Be proactive but always respect the confirmation barrier for writing.
+    - If a required app isn't open, suggest using 'OPEN_APP' first.
+    
+    KNOWLEDGE:
+    ${knowledgeBase}`;
 
     try {
       const response = await ai.models.generateContent({
-        model: 'gemini-3-pro-preview',
-        contents: [
-          { role: 'user', parts: [{ text: `System Context: Language is ${lang}. Memory follows.` }] },
-          { role: 'user', parts: [{ text: `Memory: ${JSON.stringify(sessionMemory.slice(-6))}` }] },
-          { role: 'user', parts: [{ text: context }] }
-        ],
+        model: 'gemini-3-flash-preview',
+        contents: [{ role: 'user', parts: [{ text: context }] }],
         config: {
           systemInstruction,
           responseMimeType: 'application/json',
           responseSchema: SUGGESTION_SCHEMA,
-          tools: policy.canAccessNetwork ? [{ googleSearch: {} }] : []
+          tools: [{ functionDeclarations: activeTools }, { googleSearch: {} }],
         }
       });
 
       const text = response.text;
       if (!text) return null;
-      return { id: 'osai-' + Date.now(), context, ...JSON.parse(text) };
+
+      const baseSuggestion = JSON.parse(text);
+      return { 
+        id: 'osai-' + Date.now(), 
+        context, 
+        ...baseSuggestion,
+        toolCalls: response.functionCalls
+      };
     } catch (e) { 
-      console.error("Gemini Multi-lang Error:", e);
+      console.error("Gemini Provider Error:", e);
       return null; 
     }
   }

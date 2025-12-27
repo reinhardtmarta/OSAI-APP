@@ -3,7 +3,7 @@ export const esES = {
   name: "Español",
   ui: {
     coreTitle: "OSAI CORE",
-    systemActive: "Sistema Activo v3.1",
+    systemActive: "Sistema Activo v3.2",
     statusCardCore: "Núcleo",
     statusCardMemory: "Memoria",
     monitorTitle: "Monitor de Bus",
@@ -23,9 +23,9 @@ export const esES = {
     confirmTotalAccess: "Confirmar Accesso Total",
     riskWarning: "Aviso de Riesgo Elevado",
     riskDescription: "Al activar, permites que el asistente simule toques y escritura en tu nombre en todo el sistema.",
-    latency: "Latencia 12ms",
+    latency: "Latência 12ms",
     localCognition: "Cognición Local",
-    overlayActive: "Capa Neutra Ativa",
+    overlayActive: "Capa Neutra Activa",
     online: "Sincronización reactivada.",
     offline: "Modo Local Restringido (Offline).",
     reqCognitive: "Petición cognitiva: ",
@@ -36,7 +36,10 @@ export const esES = {
     payload: "Carga Útil: ",
     success: "Éxito: ",
     riskProtocol: "Protocolo de Riesgo",
-    systemLogs: "LOGS DEL SISTEMA"
+    systemLogs: "LOGS DEL SISTEMA",
+    executingFunction: "Ejecutando Función Activa",
+    sources: "Fuentes de Búsqueda:",
+    suggestions: "Sugerencias Proactivas"
   },
   ai: {
     status: {
@@ -46,7 +49,8 @@ export const esES = {
       DOUBLE_CONFIRMATION: "Confirmación N2",
       EXECUTING: "Actuando...",
       ERROR: "Error",
-      OFFLINE: "Desconectado"
+      OFFLINE: "Desconectado",
+      CALLING: "Llamando Herramienta"
     },
     responses: {
       wake: "¿Sí? ¿Cómo puedo ayudar?",
@@ -67,16 +71,20 @@ export const esES = {
     web: { label: "Navegação Web", desc: "Búsquedas en tiempo real en internet." },
     accessibility: { label: "Control de Accesibilidad", desc: "Autoriza a la IA a interactuar con otras apps." }
   },
+  suggestions: {
+    news: { label: "Resumir Noticias", prompt: "¿Cuáles son las noticias más importantes de hoy?" },
+    social: { label: "Redes Sociales", prompt: "Resume lo que está pasando en mis redes sociales." },
+    youtube: { label: "Busca YouTube", prompt: "Busca videos sobre IA en YouTube." },
+    write: { label: "Escribir Email", prompt: "Ayúdame a escribir un correo profesional." }
+  },
   boot: [
-    "> NÚCLEO OSAI v3.1.0-ESTABLE",
+    "> NÚCLEO OSAI v3.2.0-ESTABLE",
     "> INICIALIZANDO CORE_COGNITIVO...",
+    "> CONOCIMIENTO_SISTEMA: CARGADO",
+    "> CARGANDO HERRAMIENTAS_ACTIVAS",
     "> CARGANDO REDES_NEURONALES: GEMINI-3-PRO",
-    "> COMPROBANDO POLÍTICA_SISTEMA: ENCLAVE_SEGURO",
-    "> AUTENTICANDO CAPA_ABSTRACCIÓN_HARDWARE",
-    "> ESTABLECIENDO Z-INDEX_OVERLAY: 999",
-    "> MATRIZ_MICRÓFONO: ONLINE",
-    "> MÓDULO_LECTURA_PANTALLA: ACTIVO",
-    "> LISTA_CONTROL_ACCESO: ACTUALIZADA",
+    "> COMPROBANDO POLÍTICA_SISTEMA",
+    "> AUTENTICANDO CAPA_HARDWARE",
     "> LISTO."
   ]
 };

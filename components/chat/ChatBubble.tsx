@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { AlertTriangle, ChevronRight, Info } from 'lucide-react';
+import { AlertTriangle, ChevronRight, Info, ExternalLink, Cog } from 'lucide-react';
 import { getTranslation } from '../../locales';
 import { SupportedLanguage } from '../../types';
 
@@ -10,9 +10,11 @@ interface ChatBubbleProps {
   steps?: string[];
   riskLevel?: 'LOW' | 'MEDIUM' | 'HIGH';
   lang: SupportedLanguage;
+  groundingUrls?: {uri: string, title?: string}[];
+  toolCalls?: any[];
 }
 
-export const ChatBubble: React.FC<ChatBubbleProps> = ({ role, text, steps, riskLevel, lang }) => {
+export const ChatBubble: React.FC<ChatBubbleProps> = ({ role, text, steps, riskLevel, lang, groundingUrls, toolCalls }) => {
   const isUser = role === 'user';
   const isSystem = role === 'system';
   const isThinking = role === 'thinking';
@@ -41,7 +43,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ role, text, steps, riskL
   }
 
   return (
-    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} animate-in slide-in-from-bottom-3 duration-500 ease-out`}>
+    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} animate-in slide-in-from-bottom-3 duration-500 ease-out w-full`}>
       <div 
         className={`max-w-[92%] p-5 rounded-[32px] shadow-2xl transition-all ${
           isUser 
@@ -53,6 +55,20 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ role, text, steps, riskL
           {text}
         </p>
 
+        {toolCalls && toolCalls.length > 0 && (
+          <div className="mt-3 space-y-2">
+            {toolCalls.map((call, idx) => (
+              <div key={idx} className="bg-black/20 p-3 rounded-2xl flex items-center gap-3 border border-white/5">
+                <Cog size={14} className="text-blue-400 animate-spin-slow" />
+                <div className="flex flex-col">
+                  <span className="text-[9px] font-black uppercase tracking-widest text-blue-300">Executando Função</span>
+                  <span className="text-[10px] font-mono text-slate-400">{call.name}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         {steps && steps.length > 0 && (
           <div className="mt-4 pt-4 border-t border-white/10 space-y-2">
             {steps.map((step, i) => (
@@ -61,6 +77,25 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ role, text, steps, riskL
                 <span>{step}</span>
               </div>
             ))}
+          </div>
+        )}
+
+        {groundingUrls && groundingUrls.length > 0 && (
+          <div className="mt-4 pt-4 border-t border-white/10 flex flex-col gap-2">
+            <span className="text-[9px] font-black uppercase text-slate-500 tracking-widest">Fontes de Pesquisa:</span>
+            <div className="flex flex-wrap gap-2">
+              {groundingUrls.map((url, i) => (
+                <a 
+                  key={i} 
+                  href={url.uri} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="bg-white/5 hover:bg-white/10 border border-white/10 px-3 py-1.5 rounded-full text-[10px] flex items-center gap-2 text-blue-400 transition-all truncate max-w-full"
+                >
+                  <ExternalLink size={10} /> {url.title || 'Ver Fonte'}
+                </a>
+              ))}
+            </div>
           </div>
         )}
 

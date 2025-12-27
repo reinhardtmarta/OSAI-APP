@@ -3,7 +3,7 @@ export const deDE = {
   name: "Deutsch",
   ui: {
     coreTitle: "OSAI CORE",
-    systemActive: "System Aktiv v3.1",
+    systemActive: "System Aktiv v3.2",
     statusCardCore: "Kern",
     statusCardMemory: "Speicher",
     monitorTitle: "Bus-Monitor",
@@ -36,7 +36,10 @@ export const deDE = {
     payload: "Nutzlast: ",
     success: "Erfolg: ",
     riskProtocol: "Risikoprotokoll",
-    systemLogs: "SYSTEMPROTOKOLLE"
+    systemLogs: "SYSTEMPROTOKOLLE",
+    executingFunction: "Aktive Funktion Ausführen",
+    sources: "Suchquellen:",
+    suggestions: "Proaktive Vorschläge"
   },
   ai: {
     status: {
@@ -46,7 +49,8 @@ export const deDE = {
       DOUBLE_CONFIRMATION: "Bestätigung Stufe 2",
       EXECUTING: "Ausführung...",
       ERROR: "Fehler",
-      OFFLINE: "Offline"
+      OFFLINE: "Offline",
+      CALLING: "Werkzeug Aufrufen"
     },
     responses: {
       wake: "Ja? Wie kann ich helfen?",
@@ -67,16 +71,17 @@ export const deDE = {
     web: { label: "Web-Browsing", desc: "Echtzeit-Websuche." },
     accessibility: { label: "Bedienungshilfen", desc: "Interaktion mit Apps." }
   },
+  suggestions: {
+    news: { label: "News Zusammenfassen", prompt: "Was sind die wichtigsten Nachrichten von heute?" },
+    social: { label: "Soziale Medien", prompt: "Fasse zusammen, was in meinen Feeds passiert." },
+    youtube: { label: "YouTube Suche", prompt: "Suche nach KI-Videos auf YouTube." },
+    write: { label: "E-Mail Schreiben", prompt: "Hilf mir beim Verfassen einer E-Mail." }
+  },
   boot: [
-    "> OSAI KERNEL v3.1.0-STABIL",
-    "> INITIALISIERUNG COGNITIVE_CORE...",
-    "> LADEN NEURONALER NETZE: GEMINI-3-PRO",
-    "> PRÜFEN SYSTEM_POLICY: SECURE_ENCLAVE",
-    "> AUTHENTIFIZIERUNG HARDWARE_ABSTRACTION_LAYER",
-    "> ETABLIEREN OVERLAY_Z_INDEX: 999",
-    "> MIKROFON_ARRAY: ONLINE",
-    "> SCREEN_READER_MODUL: AKTIV",
-    "> ZUGRIFFSSTEUERUNGSLISTE: AKTUALISIERT",
+    "> OSAI KERNEL v3.2.0-STABIL",
+    "> INITIALISIERUNG...",
+    "> SYSTEMWISSEN GELADEN",
+    "> AKTIVE WERKZEUGE GELADEN",
     "> BEREIT."
   ]
 };
