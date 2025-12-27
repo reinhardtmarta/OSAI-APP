@@ -34,7 +34,9 @@ export const zhCN = {
     busFail: "总线故障: ",
     doubleConfirmReq: "L2 二次确认: 必需。",
     payload: "有效载荷: ",
-    success: "成功: "
+    success: "成功: ",
+    riskProtocol: "风险协议",
+    systemLogs: "系统日志"
   },
   ai: {
     status: {

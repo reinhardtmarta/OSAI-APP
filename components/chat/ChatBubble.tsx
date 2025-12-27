@@ -1,18 +1,22 @@
 
 import React from 'react';
-import { AlertTriangle, CheckCircle2, ChevronRight, Info } from 'lucide-react';
+import { AlertTriangle, ChevronRight, Info } from 'lucide-react';
+import { getTranslation } from '../../locales';
+import { SupportedLanguage } from '../../types';
 
 interface ChatBubbleProps {
   role: 'user' | 'ai' | 'system' | 'thinking';
   text: string;
   steps?: string[];
   riskLevel?: 'LOW' | 'MEDIUM' | 'HIGH';
+  lang: SupportedLanguage;
 }
 
-export const ChatBubble: React.FC<ChatBubbleProps> = ({ role, text, steps, riskLevel }) => {
+export const ChatBubble: React.FC<ChatBubbleProps> = ({ role, text, steps, riskLevel, lang }) => {
   const isUser = role === 'user';
   const isSystem = role === 'system';
   const isThinking = role === 'thinking';
+  const t = getTranslation(lang);
 
   if (isSystem) {
     return (
@@ -63,7 +67,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ role, text, steps, riskL
         {!isUser && riskLevel && riskLevel !== 'LOW' && (
           <div className={`mt-3 pt-3 border-t border-white/5 flex items-center gap-2 text-[9px] font-black uppercase tracking-widest ${riskLevel === 'HIGH' ? 'text-red-400' : 'text-yellow-400'}`}>
             <AlertTriangle size={10} />
-            Protocolo de Risco: {riskLevel}
+            {t.ui.riskProtocol}: {riskLevel}
           </div>
         )}
       </div>

@@ -11,7 +11,7 @@ export const itIT = {
     settingsTitle: "Centro OSAI",
     settingsSub: "Privacy e Hardware",
     saveChanges: "Salva",
-    clearMemory: "Cancella memoria",
+    clearMemory: "Cancella memória",
     clearLogs: "Cancella log",
     hardwareCheck: "Verifica permessi",
     checking: "Verifica...",
@@ -34,7 +34,9 @@ export const itIT = {
     busFail: "Errore del bus: ",
     doubleConfirmReq: "Livello di Conferma 2: Richiesto.",
     payload: "Carico utile: ",
-    success: "Successo: "
+    success: "Successo: ",
+    riskProtocol: "Protocollo di Rischio",
+    systemLogs: "LOG DI SISTEMA"
   },
   ai: {
     status: {

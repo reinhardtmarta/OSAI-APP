@@ -34,7 +34,9 @@ export const ptBR = {
     busFail: "Falha de barramento: ",
     doubleConfirmReq: "Nível de Confirmação 2: Requerido.",
     payload: "Carga Útil: ",
-    success: "Sucesso: "
+    success: "Sucesso: ",
+    riskProtocol: "Protocolo de Risco",
+    systemLogs: "LOGS DO SISTEMA"
   },
   ai: {
     status: {

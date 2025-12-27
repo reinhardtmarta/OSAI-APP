@@ -34,7 +34,9 @@ export const deDE = {
     busFail: "Bus-Fehler: ",
     doubleConfirmReq: "L2-Bestätigung: Erforderlich.",
     payload: "Nutzlast: ",
-    success: "Erfolg: "
+    success: "Erfolg: ",
+    riskProtocol: "Risikoprotokoll",
+    systemLogs: "SYSTEMPROTOKOLLE"
   },
   ai: {
     status: {

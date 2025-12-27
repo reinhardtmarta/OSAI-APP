@@ -34,7 +34,9 @@ export const frFR = {
     busFail: "Échec du bus: ",
     doubleConfirmReq: "Niveau de Confirmation 2: Requis.",
     payload: "Charge utile: ",
-    success: "Succès: "
+    success: "Succès: ",
+    riskProtocol: "Protocole de Risque",
+    systemLogs: "LOGS DU SYSTÈME"
   },
   ai: {
     status: {
@@ -63,7 +65,7 @@ export const frFR = {
     location: { label: "Localisation", desc: "Aide basée sur votre position." },
     screen: { label: "Lecture d'Écran", desc: "L'IA voit votre écran pour aider." },
     web: { label: "Navigation Web", desc: "Recherches Web en temps réel." },
-    accessibility: { label: "Contrôle d'Accessibilité", desc: "Interagir avec d'autres apps." }
+    accessibility: { label: "Controle d'Accessibilité", desc: "Interagir avec d'autres apps." }
   },
   boot: [
     "> NOYAU OSAI v3.1.0-STABLE",

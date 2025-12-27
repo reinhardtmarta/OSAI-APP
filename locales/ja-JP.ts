@@ -34,7 +34,9 @@ export const jaJP = {
     busFail: "バス障害: ",
     doubleConfirmReq: "L2 二次確認: 必須。",
     payload: "ペイロード: ",
-    success: "成功: "
+    success: "成功: ",
+    riskProtocol: "リスクプロトコル",
+    systemLogs: "システムログ"
   },
   ai: {
     status: {

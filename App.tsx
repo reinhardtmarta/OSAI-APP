@@ -212,7 +212,7 @@ const App: React.FC = () => {
               <Activity size={12} className="text-blue-500" /> {t.ui.monitorTitle}
             </h2>
           </div>
-          <Terminal logs={logs} title="SYSTEM LOGS" waitingMessage={t.ui.waitingPulse} />
+          <Terminal logs={logs} title={t.ui.systemLogs} waitingMessage={t.ui.waitingPulse} />
         </div>
 
         <div className="py-10 flex flex-col items-center justify-center opacity-20 gap-4 pointer-events-none">

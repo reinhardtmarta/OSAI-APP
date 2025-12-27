@@ -34,7 +34,9 @@ export const enUS = {
     busFail: "Bus failure: ",
     doubleConfirmReq: "L2 Confirmation: Required.",
     payload: "Payload: ",
-    success: "Success: "
+    success: "Success: ",
+    riskProtocol: "Risk Protocol",
+    systemLogs: "SYSTEM LOGS"
   },
   ai: {
     status: {

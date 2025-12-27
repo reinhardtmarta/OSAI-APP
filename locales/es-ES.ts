@@ -20,12 +20,12 @@ export const esES = {
     voiceSensors: "Sensores de Voz",
     deviceAccess: "Acceso al Dispositivo",
     securityAccessibility: "Seguridad y Accesibilidad",
-    confirmTotalAccess: "Confirmar Acceso Total",
+    confirmTotalAccess: "Confirmar Accesso Total",
     riskWarning: "Aviso de Riesgo Elevado",
     riskDescription: "Al activar, permites que el asistente simule toques y escritura en tu nombre en todo el sistema.",
     latency: "Latencia 12ms",
     localCognition: "Cognición Local",
-    overlayActive: "Capa Neutra Activa",
+    overlayActive: "Capa Neutra Ativa",
     online: "Sincronización reactivada.",
     offline: "Modo Local Restringido (Offline).",
     reqCognitive: "Petición cognitiva: ",
@@ -34,7 +34,9 @@ export const esES = {
     busFail: "Fallo de bus: ",
     doubleConfirmReq: "Nivel de Confirmación 2: Requerido.",
     payload: "Carga Útil: ",
-    success: "Éxito: "
+    success: "Éxito: ",
+    riskProtocol: "Protocolo de Riesgo",
+    systemLogs: "LOGS DEL SISTEMA"
   },
   ai: {
     status: {
